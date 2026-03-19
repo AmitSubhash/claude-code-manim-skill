@@ -218,6 +218,110 @@ success.next_to(output_display, DOWN, buff=0.3)
 self.play(Write(success))
 ```
 
+## 13. Live Values in Diagrams
+
+Show actual numbers flowing through a diagram, not equations beside it. When a parameter changes, ALL downstream values update simultaneously. This is the difference between "explaining a system" and "running a system in front of the viewer." The viewer watches cause and effect propagate in real time.
+
+```python
+# A network node that shows its current computed value
+param = ValueTracker(0.0)
+
+node_value = always_redraw(lambda: DecimalNumber(
+    param.get_value(), num_decimal_places=2, font_size=20, color=WHITE,
+).move_to(node_circle))
+
+# Downstream node recomputes when param changes
+downstream_value = always_redraw(lambda: DecimalNumber(
+    sigmoid(param.get_value() * weight), num_decimal_places=3,
+    font_size=20, color=WHITE,
+).move_to(downstream_circle))
+
+# Change the parameter -- everything updates together
+self.play(param.animate.set_value(0.10), run_time=1.5)
+# The viewer sees: input changes -> intermediate changes -> output changes -> loss changes
+```
+
+The key insight: don't explain what WOULD happen if a value changed. CHANGE the value and let the viewer watch the cascade. This engages causal reasoning far more than static equations.
+
+## 14. Density Ramp
+
+Start sparse, end dense. The visual complexity of each frame should mirror the conceptual complexity at that point in the explanation. Begin with 2-3 elements. End with 15+.
+
+```
+Frame 1:    [circle]                          # just the shape
+Frame 10:   [circle] [equation]               # shape + one equation
+Frame 30:   [circle] [eq] [graph]             # add a linked view
+Frame 50:   [circle] [eq] [graph] [values]    # add concrete numbers
+Frame 60:   [EVERYTHING radiating outward]    # the full picture
+```
+
+This creates a narrative feeling of "building understanding." The viewer watches complexity emerge from simplicity, which mirrors how learning actually works. Never start at maximum density -- it overwhelms. Never stay sparse -- it feels empty.
+
+Bad: constant density throughout (every frame has 5 elements)
+Bad: starting dense then simplifying (feels like information is being removed)
+Good: 2 elements -> 5 -> 8 -> 12 -> full diagram (feels like building)
+
+```python
+# Phase 1: just the core diagram (sparse)
+self.play(Create(network_skeleton))
+self.wait(1)
+
+# Phase 2: add values flowing through
+self.play(*[Write(v) for v in node_values])
+
+# Phase 3: add the linked loss curve
+self.play(Create(loss_axes), Create(loss_curve))
+
+# Phase 4: add gradient arrows radiating from every node
+self.play(LaggedStart(*[GrowArrow(a) for a in gradient_arrows],
+                       lag_ratio=0.1))
+# Maximum density at the climax
+```
+
+## 15. Per-Scene Skeleton
+
+Each scene should have ONE anchor diagram that stays visible throughout the scene. Elements are added TO it, highlighted WITHIN it, but the skeleton itself never disappears. This gives the viewer a stable spatial map. They always know "where they are" in the explanation.
+
+The skeleton is NOT the same diagram across scenes (that would be monotonous). It's the principle that within any single scene, there is ONE persistent reference object.
+
+```python
+# Scene: explaining softmax
+# Skeleton = the network diagram (stays for entire scene)
+network = create_network_diagram()
+self.play(Create(network))
+
+# Everything else is added relative to the skeleton
+highlight = SurroundingRectangle(network.output_layer, color=YELLOW)
+self.play(Create(highlight))
+
+softmax_eq = MathTex(r"\text{softmax}(z_i) = \frac{e^{z_i}}{\sum e^{z_j}}")
+softmax_eq.next_to(network, RIGHT, buff=0.5)
+self.play(Write(softmax_eq))
+
+# Skeleton remains. Additions come and go around it.
+self.play(FadeOut(highlight), FadeOut(softmax_eq))
+# network is STILL there for the next beat
+```
+
+## 16. Caption Zone
+
+Reserve the bottom 20% of the frame (y < -2.5) exclusively for narration text or subtitles. Never place visual elements there. This creates a clear spatial contract: the viewer looks at the middle for visuals and glances down for explanation. Mixing the two causes confusion.
+
+```python
+CAPTION_Y = -3.0
+
+# Narration-synced caption
+caption = Text("the gradient tells us which direction to move",
+               font_size=22, color=WHITE)
+caption.move_to(DOWN * CAPTION_Y)
+self.play(Write(caption))
+
+# When the next line of narration comes, replace it
+next_caption = Text("and by how much", font_size=22, color=WHITE)
+next_caption.move_to(DOWN * CAPTION_Y)
+self.play(ReplacementTransform(caption, next_caption))
+```
+
 ## Quick Reference
 
 | # | Principle | Key Idea |
@@ -234,3 +338,7 @@ self.play(Write(success))
 | 10 | Concrete values | Real numbers, not placeholders |
 | 11 | Progressive complexity | Dim previous, add new layer |
 | 12 | Emotional anchoring | Charged language on screen |
+| 13 | Live values in diagrams | Numbers flow through diagrams, update in real time |
+| 14 | Density ramp | Start sparse (2-3 elements), end dense (15+) |
+| 15 | Per-scene skeleton | ONE anchor diagram per scene, never removed |
+| 16 | Caption zone | Bottom 20% reserved for narration text only |
