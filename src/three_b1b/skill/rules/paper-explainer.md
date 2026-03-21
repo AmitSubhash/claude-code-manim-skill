@@ -8,6 +8,28 @@ tags: [manim, research, paper, explainer, video, scientific, pedagogy]
 
 Prerequisites: you have read `equations.md` (MathTex, TransformMatchingTex, submobjects) and `animations.md` (animation types, rate functions, composition). This file teaches you how to THINK about building a video, not just how to write the code.
 
+## Research Phase: Browsing for Source Material
+
+Before writing narration or code, you often need to read the paper, check figures, or gather reference material from the web. Use `browser-use` (via Bash) for all browsing:
+
+```bash
+# Open the paper's webpage or PDF viewer
+browser-use open https://arxiv.org/abs/2401.12345
+browser-use state                    # get page structure
+browser-use screenshot /tmp/paper_fig2.png   # capture a figure for reference
+
+# Extract text from a page
+browser-use eval "document.querySelector('article').innerText.slice(0, 2000)"
+
+# Navigate supplementary materials
+browser-use click 42                 # click a link by index from state
+
+# Close when done
+browser-use close
+```
+
+Prefer `browser-use` over Playwright MCP -- it uses 5-1600x fewer tokens per operation and has sub-second response times via its daemon architecture.
+
 ## Mandatory Pre-Code Gates
 
 **Do NOT write any Manim code until these 3 artifacts exist.** This is the single most impactful rule. Skipping these gates produces videos that are "animation-driven" (rectangles + text) instead of "story-driven" (visual explanations timed to narration).

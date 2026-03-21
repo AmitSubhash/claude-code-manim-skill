@@ -18,6 +18,11 @@ research.md -> curriculum (scene list) -> SCENE PLANS -> style.py -> agents
                                          THIS IS NEW
 ```
 
+> **Browsing:** During the research phase, use `browser-use` (Bash) for reading
+> papers, checking figures, and gathering reference material. Core workflow:
+> `browser-use open <url>` -> `browser-use state` -> interact. See
+> [paper-explainer.md](paper-explainer.md) for examples.
+
 A scene plan specifies WHAT goes WHERE for each scene. Without it, agents
 invent their own layouts and 30-40% of scenes have spatial bugs.
 
