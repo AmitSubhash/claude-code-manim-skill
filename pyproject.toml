@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "3brown1blue"
-version = "1.2.1"
+version = "0.2.2"
 description = "Generate 3Blue1Brown-style Manim explainer videos from topics or slide decks"
 readme = "README.md"
 requires-python = ">=3.9"
