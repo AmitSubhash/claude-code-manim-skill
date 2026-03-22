@@ -291,6 +291,51 @@ manim>=0.18.0
 numpy
 ```
 
+## Concatenating Scenes with ffmpeg
+
+To combine all rendered scenes into a single video:
+
+```bash
+# Create a concat list with ABSOLUTE paths (required by ffmpeg)
+BASE="$(pwd)"
+for f in media/videos/*/1080p60/*.mp4; do
+    echo "file '${BASE}/${f}'"
+done > /tmp/concat_list.txt
+
+ffmpeg -y -f concat -safe 0 -i /tmp/concat_list.txt -c copy final_video.mp4
+```
+
+**Important:** ffmpeg's concat demuxer resolves paths relative to the list file's
+location, not your working directory. Always use absolute paths in the list, or
+place the list file in the same directory as the videos.
+
+## Render Script Best Practices
+
+The `render_all.sh` script should handle missing dependencies gracefully:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Check manim is available (pip install may not be on PATH)
+if ! command -v manim &> /dev/null; then
+    if python3 -m manim --version &> /dev/null; then
+        MANIM="python3 -m manim"
+    else
+        echo "Error: manim not found. Install with: pip install manim"
+        exit 1
+    fi
+else
+    MANIM="manim"
+fi
+
+QUALITY="${1:--qh}"
+for scene_file in scenes/s*.py; do
+    echo "=== Rendering $(basename "$scene_file") ==="
+    $MANIM "$QUALITY" "$scene_file"
+done
+```
+
 ## Tips
 
 1. **Keep scenes under 300 lines.** Split complex scenes into helper functions in `utils/`.
@@ -298,3 +343,4 @@ numpy
 3. **Test at low quality first**: `manim -ql scenes/s01_intro.py` before rendering at high quality.
 4. **Use `manim -s`** to render just the last frame when debugging layout.
 5. **Number scene files** to maintain order: `s01_`, `s02_`, etc.
+6. **Verify manim is installed** before creating render scripts: `which manim || python3 -m manim --version`.

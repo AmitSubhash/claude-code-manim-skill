@@ -32,6 +32,7 @@ These are the most common failures. Load [rules/troubleshooting.md](rules/troubl
 10. **`get_part_by_tex("missing")` returns None silently** -- check before calling `.set_color()` on the result.
 11. **`reference = mob` is NOT a copy** -- use `mob.copy()` for independent objects.
 12. **Transparent background** -- mp4 has no alpha. Use `--format webm -t`.
+13. **`VGroup.add(mob.animate.move_to(...))` crashes** -- `.animate` returns an `_AnimationBuilder`, not a VMobject. Only use `.animate` inside `self.play()`.
 
 ## Scripts and Templates
 

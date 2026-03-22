@@ -148,6 +148,25 @@ MathTex(r"E = mc^2")
 Tex(r"Energy is $E = mc^2$")
 ```
 
+### .animate added to VGroup crashes
+
+**Cause:** `.animate` returns an `_AnimationBuilder`, not a VMobject. You cannot add it to a VGroup.
+
+```python
+# BAD: crashes with "Only values of type VMobject can be added as submobjects"
+group = VGroup()
+for obj in objects:
+    group.add(obj.animate.move_to(ORIGIN))
+
+# GOOD: use .animate only inside self.play()
+self.play(*[obj.animate.move_to(ORIGIN) for obj in objects])
+
+# GOOD: if you need target positions, create copies
+targets = VGroup(*[obj.copy().move_to(ORIGIN) for obj in objects])
+```
+
+**Lint check:** After generating scene code, grep for `\.add\(.*\.animate` to catch this pattern before rendering.
+
 ## Silent bugs (no crash, wrong output)
 
 These are worse than crashes because you don't notice until you watch the video.
