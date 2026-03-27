@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from .edit_scene import edit, list_scenes
 from .from_slides import from_slides
 from .generate import generate
 
@@ -231,6 +232,8 @@ def main() -> None:
 
 main.add_command(generate)
 main.add_command(from_slides)
+main.add_command(edit)
+main.add_command(list_scenes)
 
 
 @main.command()
