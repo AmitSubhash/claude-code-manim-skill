@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 media/
+audit_frames/
+.DS_Store
+dist/
