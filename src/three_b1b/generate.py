@@ -246,6 +246,7 @@ def _render_scene(scene_file: Path, quality: str) -> None:
 @click.option("--plan-model", default=None, help="Planning model (same as --model if omitted).")
 @click.option("--api-key", "-k", default=None, help="API key (or set the provider env var).")
 @click.option("--output", "-o", default="scene.py", show_default=True, help="Output file.")
+@click.option("--plan-output", default=None, help="Optional markdown file to save the reviewed plan.")
 @click.option("--render", is_flag=True, help="Run manim on the generated file.")
 @click.option("--quality", "-q", type=click.Choice(["l", "m", "h", "k"]), default="l",
               show_default=True, help="Render quality: l=low/fast, m=medium, h=1080p, k=4K.")
@@ -264,6 +265,7 @@ def generate(
     plan_model: Optional[str],
     api_key: Optional[str],
     output: str,
+    plan_output: Optional[str],
     render: bool,
     quality: str,
     audience: str,
@@ -303,6 +305,10 @@ def generate(
 
     # Step 2: Review
     plan = confirm_plan(plan)
+    if plan_output:
+        plan_path = Path(plan_output)
+        plan_path.write_text(plan)
+        click.echo(f"Saved plan: {plan_path}")
 
     # Step 3: Generate code from plan
     click.echo(f"\nGenerating Manim code with {model}...")

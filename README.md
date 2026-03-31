@@ -51,6 +51,9 @@ uvx '3brown1blue[anthropic]' generate "Fourier transforms" --render
 # audience + domain aware
 3brown1blue generate "neural ODEs" -a graduate -d machine-learning -p claude-code
 3brown1blue generate "sorting algorithms" -a high-school -d algorithms -p anthropic --render
+
+# save the reviewed plan so you can generate voiceover later
+3brown1blue generate "attention mechanism" -p claude-code --plan-output attention_plan.md
 ```
 
 ## Generate from slides
@@ -62,6 +65,35 @@ pip install '3brown1blue[slides]'
 3brown1blue from-slides lecture.pptx -p claude-code --render
 3brown1blue from-slides research_talk.pptx -a graduate -d neuroscience -p anthropic
 ```
+
+## Generate voiceover with VibeVoice-Realtime
+
+Experimental single-speaker narration workflow using Microsoft's open-source
+VibeVoice-Realtime model. This is the supported path for narration right now;
+the older multi-speaker VibeVoice-TTS release was removed upstream.
+
+Install VibeVoice separately in the same environment:
+
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice
+pip install -e .[streamingtts]
+```
+
+Then save a video plan and turn its `## Narration Script` into per-scene WAVs:
+
+```bash
+3brown1blue generate "backpropagation" -p claude-code --plan-output backprop_plan.md
+
+3brown1blue voiceover backprop_plan.md \
+  --voices-dir /path/to/VibeVoice/demo/voices/streaming_model \
+  --speaker-name Carter \
+  --output-dir backprop_voice
+```
+
+You can also point `voiceover` at a project directory. It will first look for
+`# NARRATION:` comments in `scene_*.py`, then fall back to `narration.md`,
+`plan.md`, `video_plan.md`, or `storyboard.md`.
 
 ## Audience levels
 
@@ -114,6 +146,7 @@ Each domain includes a visual vocabulary, preferred layout templates, 5 domain-s
 ```
 3brown1blue generate TOPIC [OPTIONS]
 3brown1blue from-slides DECK [OPTIONS]
+3brown1blue voiceover SOURCE [OPTIONS]
 3brown1blue install [--platform] [--force]
 3brown1blue uninstall [--platform]
 3brown1blue update [--platform]
@@ -130,8 +163,23 @@ Common options for generate/from-slides:
   --plan-model     planning model (same as --model if omitted)
   --api-key   -k   API key (or set the provider env var)
   --output    -o   output file  [default: scene.py]
+  --plan-output    optional markdown file to save the reviewed plan
   --render         run manim after generation
   --quality   -q   l=fast | m=medium | h=1080p | k=4K  [default: l]
+```
+
+Voiceover options:
+```
+  --project-dir -d   project directory for scene-name matching
+  --model-path       VibeVoice-Realtime model id/path
+  --speaker-name     voice preset name  [default: Carter]
+  --voice-prompt     explicit .pt voice prompt file
+  --voices-dir       directory containing VibeVoice voice prompts
+  --output-dir -o    output directory for wav files
+  --device           auto | cuda | mps | cpu  [default: auto]
+  --cfg-scale        guidance scale  [default: 1.5]
+  --ddpm-steps       diffusion steps  [default: 5]
+  --list-voices      list available prompts and exit
 ```
 
 ## Showcase

@@ -14,6 +14,7 @@ from .from_slides import from_slides
 from .generate import generate
 from .remix_audience import remix
 from .split_project import split
+from .voiceover import voiceover
 
 SKILL_SOURCE = Path(__file__).parent / "skill"
 
@@ -241,6 +242,7 @@ main.add_command(list_scenes)
 main.add_command(preview)
 main.add_command(remix)
 main.add_command(split)
+main.add_command(voiceover)
 
 
 @main.command()

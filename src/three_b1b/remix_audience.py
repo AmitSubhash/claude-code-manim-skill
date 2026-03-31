@@ -385,6 +385,11 @@ def _cleanup_old_scenes(
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Project directory (auto-detected if omitted).",
 )
+@click.option(
+    "--plan-output",
+    default=None,
+    help="Optional markdown file to save the reviewed remix plan.",
+)
 @click.option("--render", is_flag=True, help="Render all new scenes after generation.")
 @click.option(
     "--quality", "-q",
@@ -398,6 +403,7 @@ def remix(
     model: Optional[str],
     api_key: Optional[str],
     project_dir: Path,
+    plan_output: Optional[str],
     render: bool,
     quality: str,
 ) -> None:
@@ -465,6 +471,10 @@ def remix(
 
     # -- Step 2: User confirms the plan --------------------------------------
     plan = confirm_plan(plan)
+    if plan_output:
+        plan_path = Path(plan_output)
+        plan_path.write_text(plan)
+        click.echo(f"Saved plan: {plan_path}")
 
     # -- Step 3: Generate new scene files ------------------------------------
     click.echo(f"\nGenerating remixed scenes with {model}...")

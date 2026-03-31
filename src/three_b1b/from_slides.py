@@ -175,6 +175,7 @@ def _format_slides_markdown(slides: list[dict], vision_descs: dict[int, list[str
 @click.option("--plan-model", default=None, help="Planning model (haiku/gpt-4o-mini by default).")
 @click.option("--api-key", "-k", default=None, help="API key (or set the provider env var).")
 @click.option("--output", "-o", default="scene.py", show_default=True, help="Output file.")
+@click.option("--plan-output", default=None, help="Optional markdown file to save the reviewed plan.")
 @click.option("--render", is_flag=True, help="Run manim after generation.")
 @click.option("--quality", "-q", type=click.Choice(["l", "m", "h", "k"]), default="l",
               show_default=True, help="Render quality: l=fast, m=medium, h=1080p, k=4K.")
@@ -195,6 +196,7 @@ def from_slides(
     plan_model: Optional[str],
     api_key: Optional[str],
     output: str,
+    plan_output: Optional[str],
     render: bool,
     quality: str,
     mode: str,
@@ -255,6 +257,10 @@ def from_slides(
                     SLIDES_PLAN.format(slides_content=slides_md, audience=audience, domain=domain),
                     system=system, audience=audience, domain=domain)
     plan = confirm_plan(plan)
+    if plan_output:
+        plan_path = Path(plan_output)
+        plan_path.write_text(plan)
+        click.echo(f"Saved plan: {plan_path}")
 
     click.echo(f"\nGenerating Manim code with {model}...")
     raw = call_llm(provider, model, api_key, SLIDES_GENERATE.format(plan=plan),
