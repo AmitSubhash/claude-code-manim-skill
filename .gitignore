@@ -1,6 +1,13 @@
 __pycache__/
 *.pyc
+*.mp4
+*.wav
 media/
 audit_frames/
+voiceover_audio/
+voiceover_video/
 .DS_Store
+.venv/
+.tts311/
+.ruff_cache/
 dist/
