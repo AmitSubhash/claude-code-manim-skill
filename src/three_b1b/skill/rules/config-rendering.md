@@ -227,6 +227,130 @@ config.tex_template = template
 eq = MathTex(r"\qty{9.8}{\meter\per\second\squared}", tex_template=template)
 ```
 
+## manim.cfg Project Configuration
+
+Place `manim.cfg` in your project root to set defaults for all renders in that directory. This avoids repeating CLI flags and ensures consistency across team members.
+
+### Recommended starter config
+
+```ini
+[CLI]
+# Visual defaults
+background_color = #1a1a2e
+background_opacity = 1
+fps = 30
+
+# Output
+media_dir = ./media
+video_dir = ./media/videos
+images_dir = ./media/images
+
+# Quality (override per-render with -ql, -qh, etc.)
+quality = medium_quality
+
+# Resolution (only needed if you want non-standard sizes)
+pixel_height = 1080
+pixel_width = 1920
+
+# Renderer
+renderer = cairo
+
+# Preview
+preview = False
+
+# LaTeX
+# tex_template_file = ./custom_template.tex
+```
+
+### Common project-level overrides
+
+| Setting | Value | Use case |
+|---------|-------|----------|
+| `background_color` | `#1a1a2e` | Dark blue-black (3b1b style) |
+| `background_color` | `#0d1117` | GitHub dark theme |
+| `background_color` | `#ffffff` | White background for print/slides |
+| `frame_rate` / `fps` | 30 | Standard video (default for `-qm`) |
+| `frame_rate` / `fps` | 60 | Smooth animation (default for `-qh`) |
+| `pixel_height` | 1080 | Standard HD |
+| `pixel_height` | 2160 | 4K output |
+| `output_file` | `my_video` | Custom output filename |
+
+### Programmatic equivalent
+
+```python
+from manim import config
+
+config.background_color = "#1a1a2e"
+config.frame_rate = 30
+config.pixel_height = 1080
+config.pixel_width = 1920
+config.media_dir = "./media"
+```
+
+CLI flags always override `manim.cfg`, which overrides Python `config` defaults.
+
+## Chapter Markers with next_section()
+
+Use `self.next_section()` to mark logical chapter breaks in your scene. Each section becomes a separate video file when rendered with `--save_sections`, useful for compositing, chaptered uploads, or isolating specific parts for re-rendering.
+
+### Basic usage
+
+```python
+class FullVideo(Scene):
+    def construct(self) -> None:
+        self.next_section("Hook")
+        title = Text("Attention Is All You Need", font_size=36)
+        self.play(Write(title))
+        self.wait(2)
+
+        self.next_section("Problem")
+        self.play(FadeOut(title))
+        problem = Text("RNNs are slow. Can we do better?", font_size=28)
+        self.play(Write(problem))
+        self.wait(2)
+
+        self.next_section("Method")
+        self.play(FadeOut(problem))
+        # ... method explanation ...
+
+        self.next_section("Results")
+        # ... results ...
+
+        self.next_section("Takeaway")
+        # ... closing ...
+```
+
+### Rendering sections
+
+```bash
+# Render full video as one file (sections are metadata only)
+manim -qh scene.py FullVideo
+
+# Render each section as a separate file
+manim -qh --save_sections scene.py FullVideo
+# Produces: Hook.mp4, Problem.mp4, Method.mp4, Results.mp4, Takeaway.mp4
+```
+
+### Skip sections during development
+
+```python
+# Skip rendering a section (useful for iterating on later sections)
+self.next_section("Hook", skip_animations=True)
+# ... hook animations are skipped ...
+
+self.next_section("Method", skip_animations=False)
+# ... only this section renders ...
+```
+
+### When to use sections vs separate scene files
+
+| Approach | When to use |
+|----------|-------------|
+| `next_section()` in one scene | Chapters share state (mobjects carry over between sections) |
+| Separate scene files | Chapters are independent. Enables parallel agent generation. Preferred for multi-scene projects. |
+
+For multi-scene projects, prefer separate files (see `project-organization.md`). Use `next_section()` within a single scene when transitions depend on objects from the previous section (e.g., a pipeline that builds up across chapters).
+
 ## Useful CLI Flags Summary
 
 | Flag | Description |

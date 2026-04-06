@@ -191,6 +191,37 @@ group.add(new_mob)
 group.remove(old_mob)
 ```
 
+## Boolean operations
+
+Manim supports CSG (Constructive Solid Geometry) operations on VMobjects. These
+combine two shapes into a new shape, which is useful for Venn diagrams, set theory
+visualizations, and any scene where regions overlap.
+
+```python
+from manim import Union, Intersection, Difference, Exclusion
+
+circle = Circle(radius=1).shift(LEFT * 0.5)
+square = Square(side_length=1.5).shift(RIGHT * 0.5)
+
+union = Union(circle, square, color=BLUE, fill_opacity=0.5)       # area in either shape
+inter = Intersection(circle, square, color=GREEN, fill_opacity=0.5)  # area in both shapes
+diff  = Difference(circle, square, color=RED, fill_opacity=0.5)     # circle minus square
+excl  = Exclusion(circle, square, color=YELLOW, fill_opacity=0.5)   # area in one but not both
+```
+
+The result of each operation is a new VMobject. You can animate it, style it,
+and group it like any other shape. You can also chain operations:
+
+```python
+# Three-way intersection
+a, b, c = [Circle(radius=1).shift(d * 0.6) for d in [LEFT, RIGHT, UP]]
+core = Intersection(a, b, c, color=GOLD, fill_opacity=0.8)
+```
+
+**Note:** Boolean operations work on the filled regions defined by the shapes'
+outlines. Both shapes need to have closed paths for the operations to produce
+meaningful results.
+
 ## The .animate syntax (preview)
 
 Any method becomes a smooth animation when called on `.animate`:

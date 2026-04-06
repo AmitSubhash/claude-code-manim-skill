@@ -1,10 +1,10 @@
 ---
 name: Visual Design Principles
-description: 12 core principles for creating effective math animations -- from Tufte, Bret Victor, 3Blue1Brown, and cognitive science
+description: 17 core principles for creating effective math animations -- from Tufte, Bret Victor, 3Blue1Brown, and cognitive science
 tags: [manim, design, principles, pedagogy, 3b1b, visual-explanation]
 ---
 
-# 12 Visual Design Principles
+# 17 Visual Design Principles
 
 ## 1. Geometry Before Algebra
 
@@ -322,6 +322,29 @@ next_caption.move_to(DOWN * CAPTION_Y)
 self.play(ReplacementTransform(caption, next_caption))
 ```
 
+## 17. Monospace for All Text
+
+Use `font="Menlo"` (macOS) or `font="Courier New"` (cross-platform fallback) for all `Text()` objects. Pango's default proportional font produces inconsistent letter spacing in Manim, especially when text animates or scales. Monospace fonts render with uniform glyph widths, making alignment predictable.
+
+```python
+# BAD: proportional font has inconsistent kerning
+label = Text("0.342 -> 0.891")
+
+# GOOD: monospace is predictable
+label = Text("0.342 -> 0.891", font="Menlo")
+
+# Define in style.py for consistency
+FONT = "Menlo"  # fallback: "Courier New"
+
+def safe_text(text, font_size=BODY_SIZE, color=WHITE, max_width=12.0):
+    t = Text(text, font_size=font_size, color=color, font=FONT)
+    if t.width > max_width:
+        t.scale_to_fit_width(max_width)
+    return t
+```
+
+**Exception:** `MathTex` and `Tex` use LaTeX's Computer Modern fonts and are unaffected. Only `Text()` objects need the font override.
+
 ## Quick Reference
 
 | # | Principle | Key Idea |
@@ -342,3 +365,4 @@ self.play(ReplacementTransform(caption, next_caption))
 | 14 | Density ramp | Start sparse (2-3 elements), end dense (15+) |
 | 15 | Per-scene skeleton | ONE anchor diagram per scene, never removed |
 | 16 | Caption zone | Bottom 20% reserved for narration text only |
+| 17 | Monospace for all text | font="Menlo" on Text(); MathTex unaffected |

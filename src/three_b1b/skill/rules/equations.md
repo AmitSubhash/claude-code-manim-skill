@@ -268,4 +268,57 @@ eq = MathTex(
 4. **Percent sign**: `r"\%"` not `%` (which starts a LaTeX comment and swallows the rest of the line)
 5. **Line breaks**: `r"\\"` in a raw string produces the `\\` that LaTeX interprets as a line break
 
+## Advanced TransformMatchingTex Features
+
+### key_map: explicit term mapping
+
+When variable names change between equations, `key_map` tells Manim which source
+term should morph into which target term:
+
+```python
+eq1 = MathTex(r"{{ \theta }} = {{ \arctan }} {{ \frac{y}{x} }}")
+eq2 = MathTex(r"{{ \phi }} = {{ \text{atan2} }} {{ (y, x) }}")
+
+# "theta" morphs into "phi", "arctan" into "atan2"
+self.play(TransformMatchingTex(eq1, eq2, key_map={
+    r"\theta": r"\phi",
+    r"\arctan": r"\text{atan2}",
+}))
+```
+
+Without `key_map`, unmatched terms fade out/in independently (visually disconnected).
+With it, the viewer sees one symbol smoothly become another.
+
+### substrings_to_isolate: automatic term separation
+
+Instead of manually wrapping every term in `{{ }}`, list the substrings you need
+to target and let Manim split them automatically:
+
+```python
+eq = MathTex(
+    r"\nabla \cdot \mathbf{E} = \frac{\rho}{\epsilon_0}",
+    substrings_to_isolate=[r"\mathbf{E}", r"\rho", r"\epsilon_0"],
+)
+# Now eq.get_part_by_tex(r"\mathbf{E}") works without {{ }} notation
+eq.get_part_by_tex(r"\mathbf{E}").set_color(BLUE)
+```
+
+This is useful for long equations where `{{ }}` notation would be hard to read.
+The isolated substrings become separate submobjects; everything else is grouped
+into the remaining submobjects.
+
+### Combining key_map with substrings_to_isolate
+
+For derivations where both equations are complex:
+
+```python
+eq1 = MathTex(r"E = \frac{1}{2} m v^2",
+              substrings_to_isolate=["E", "m", "v^2"])
+eq2 = MathTex(r"K = \frac{1}{2} m v^2",
+              substrings_to_isolate=["K", "m", "v^2"])
+
+# E -> K morphs, m and v^2 match automatically
+self.play(TransformMatchingTex(eq1, eq2, key_map={"E": "K"}))
+```
+
 For derivation patterns, annotations, and complete worked examples, see [equation-derivations.md](equation-derivations.md).

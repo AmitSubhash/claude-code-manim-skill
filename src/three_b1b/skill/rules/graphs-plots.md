@@ -293,3 +293,192 @@ label = axes.get_graph_label(curve, r"\mathcal{N}(0,1)")
 self.play(Create(axes), Create(curve), Write(label))
 self.play(FadeIn(area))
 ```
+
+## Graph Theory
+
+Manim provides `Graph` and `DiGraph` mobjects for network visualization. These are distinct from function-plotting graphs. They represent nodes (vertices) and connections (edges) and support automatic layout algorithms.
+
+### Basic Graph
+
+```python
+from manim import *
+
+class SimpleGraph(Scene):
+    def construct(self) -> None:
+        vertices = [1, 2, 3, 4, 5]
+        edges = [(1, 2), (1, 3), (2, 4), (3, 4), (4, 5)]
+
+        g = Graph(
+            vertices, edges,
+            layout="spring",
+            vertex_config={"radius": 0.2, "fill_color": BLUE},
+            edge_config={"stroke_color": GRAY, "stroke_width": 2},
+        )
+        self.play(Create(g))
+        self.wait(1)
+```
+
+### Directed Graph (DiGraph)
+
+```python
+class DirectedGraph(Scene):
+    def construct(self) -> None:
+        vertices = ["Q", "K", "V", "Attn", "Out"]
+        edges = [("Q", "Attn"), ("K", "Attn"), ("V", "Attn"), ("Attn", "Out")]
+
+        dg = DiGraph(
+            vertices, edges,
+            layout="tree",
+            root_vertex="Out",
+            vertex_config={"radius": 0.25, "fill_color": BLUE_D},
+            edge_config={"stroke_color": WHITE, "tip_config": {"tip_length": 0.15}},
+        )
+        self.play(Create(dg))
+        self.wait(1)
+```
+
+### Layout Algorithms
+
+| Layout | Best for | Notes |
+|--------|----------|-------|
+| `"spring"` | General networks | Force-directed, good default |
+| `"circular"` | Cycle graphs, ring topologies | Vertices on a circle |
+| `"kamada_kawai"` | Small-medium graphs | Energy-minimized, often cleaner than spring |
+| `"tree"` | Hierarchies, DAGs | Requires `root_vertex` parameter |
+| `"partite"` | Bipartite/multipartite graphs | Requires `partitions` parameter |
+| `"planar"` | Planar graphs | No edge crossings if graph is planar |
+| `"shell"` | Concentric rings | Vertices arranged in shells |
+| `"spectral"` | Graphs with community structure | Uses eigenvectors of adjacency matrix |
+| Custom dict | Precise control | `layout={1: LEFT*2, 2: RIGHT*2, ...}` |
+
+### Custom Vertex Mobjects
+
+Replace default dots with any mobject using `vertex_type` or a label dictionary:
+
+```python
+class LabeledGraph(Scene):
+    def construct(self) -> None:
+        vertices = ["Encoder", "Attention", "FFN", "Decoder"]
+        edges = [("Encoder", "Attention"), ("Attention", "FFN"), ("FFN", "Decoder")]
+
+        # Custom labels via vertex_type factory
+        def make_vertex(v):
+            label = Text(str(v), font_size=16, color=WHITE)
+            rect = Rectangle(
+                width=label.width + 0.4, height=0.5,
+                fill_color=BLUE_E, fill_opacity=0.8,
+                stroke_color=BLUE_A,
+            )
+            return VGroup(rect, label)
+
+        g = DiGraph(
+            vertices, edges,
+            layout="tree",
+            root_vertex="Decoder",
+            vertex_type=make_vertex,
+            edge_config={"stroke_color": GRAY_A, "tip_config": {"tip_length": 0.15}},
+        )
+        self.play(Create(g))
+        self.wait(1)
+```
+
+### Edge Styling
+
+```python
+# Per-edge configuration
+edge_config = {
+    ("A", "B"): {"stroke_color": RED, "stroke_width": 3},
+    ("B", "C"): {"stroke_color": BLUE, "stroke_width": 1},
+    "default": {"stroke_color": GRAY, "stroke_width": 2},
+}
+
+g = Graph(vertices, edges, edge_config=edge_config)
+```
+
+### Animated Graph Changes
+
+```python
+class GraphAnimation(Scene):
+    def construct(self) -> None:
+        vertices = [1, 2, 3, 4]
+        edges = [(1, 2), (2, 3), (3, 4)]
+
+        g = Graph(vertices, edges, layout="circular")
+        self.play(Create(g))
+        self.wait(0.5)
+
+        # Change layout with animation
+        self.play(g.animate.change_layout("spring"))
+        self.wait(0.5)
+
+        # Add vertices and edges
+        g.add_vertices(5, positions={5: RIGHT * 2})
+        g.add_edges((4, 5))
+        self.play(Create(g))
+        self.wait(1)
+```
+
+### Knowledge Graph Example
+
+A complete example showing a labeled directed graph with semantic coloring:
+
+```python
+class KnowledgeGraph(Scene):
+    """Directed knowledge graph with labeled nodes and typed edges."""
+
+    def construct(self) -> None:
+        # Define the graph structure
+        vertices = ["Transformer", "Attention", "FFN", "Encoder", "Decoder", "Embeddings"]
+        edges = [
+            ("Transformer", "Encoder"),
+            ("Transformer", "Decoder"),
+            ("Encoder", "Attention"),
+            ("Encoder", "FFN"),
+            ("Decoder", "Attention"),
+            ("Decoder", "FFN"),
+            ("Embeddings", "Encoder"),
+            ("Embeddings", "Decoder"),
+        ]
+
+        # Color by node type
+        node_colors = {
+            "Transformer": YELLOW,
+            "Encoder": BLUE,
+            "Decoder": GREEN,
+            "Attention": RED,
+            "FFN": ORANGE,
+            "Embeddings": PURPLE,
+        }
+
+        def make_node(name):
+            label = Text(name, font_size=14, color=WHITE)
+            circle = Circle(
+                radius=max(label.width / 2 + 0.15, 0.35),
+                fill_color=node_colors.get(name, GRAY),
+                fill_opacity=0.3,
+                stroke_color=node_colors.get(name, GRAY),
+            )
+            return VGroup(circle, label)
+
+        g = DiGraph(
+            vertices, edges,
+            layout="kamada_kawai",
+            vertex_type=make_node,
+            edge_config={
+                "stroke_color": GRAY_A,
+                "stroke_width": 1.5,
+                "tip_config": {"tip_length": 0.12, "tip_width": 0.08},
+            },
+        ).scale(1.2)
+
+        # Animate: nodes first, then edges
+        self.play(
+            LaggedStart(*[FadeIn(g[v], scale=0.5) for v in vertices], lag_ratio=0.15),
+            run_time=2,
+        )
+        self.play(
+            LaggedStart(*[Create(g.edges[e]) for e in edges], lag_ratio=0.1),
+            run_time=2,
+        )
+        self.wait(2)
+```

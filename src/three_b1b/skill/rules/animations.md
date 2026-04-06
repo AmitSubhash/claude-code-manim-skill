@@ -272,3 +272,55 @@ self.play(
     run_time=3,
 )
 ```
+
+### Pattern 5: FadeTransform for dissimilar shapes
+`Transform` interpolates control points, which looks broken when source and target
+have very different geometry (e.g., a circle morphing into a bar chart). Use
+`FadeTransform` instead: it cross-fades, producing a clean visual transition.
+
+```python
+# BAD: control point interpolation creates ugly intermediate shapes
+self.play(Transform(pie_chart, bar_chart))
+
+# GOOD: cross-fade for dissimilar shapes
+self.play(FadeTransform(pie_chart, bar_chart))
+```
+
+Use `Transform` / `ReplacementTransform` when source and target share similar
+structure (equation to equation, circle to ellipse). Use `FadeTransform` when
+they differ structurally (diagram to chart, text to equation, pipeline to table).
+
+### Pattern 6: TracedPath for following moving objects
+`TracedPath` draws a trail behind a moving mobject. Useful for showing trajectories,
+gradient descent paths, or orbit traces.
+
+```python
+dot = Dot(axes.c2p(0, 0), color=YELLOW)
+trace = TracedPath(dot.get_center, stroke_color=YELLOW, stroke_opacity=0.6)
+self.add(trace)
+
+# The trace builds as the dot moves
+self.play(MoveAlongPath(dot, axes.plot(lambda x: np.sin(x)), run_time=4))
+```
+
+Note: Add the `TracedPath` to the scene BEFORE animating the dot. The path
+accumulates points from the moment it is added.
+
+### Pattern 7: ShowPassingFlash for highlight sweeps
+`ShowPassingFlash` runs a bright flash along a VMobject's path. Good for
+emphasizing curves, edges, or connections without permanently changing them.
+
+```python
+curve = axes.plot(lambda x: x**2, color=BLUE)
+self.add(curve)
+
+# Flash sweeps along the curve
+self.play(ShowPassingFlash(
+    curve.copy().set_color(YELLOW).set_stroke(width=8),
+    time_width=0.3,  # fraction of path lit at once (0 to 1)
+    run_time=2,
+))
+```
+
+Combine with `LaggedStart` for cascading flashes across multiple edges in
+a graph or network diagram.

@@ -126,6 +126,83 @@ PALETTE_BIO = {
 }
 ```
 
+## Named palette presets
+
+These four palettes cover most use cases out of the box. Copy whichever fits your
+project into `style.py` and rename keys to match your domain vocabulary.
+
+### Classic 3B1B
+
+The Grant Sanderson signature look. High-contrast primaries on a deep navy background.
+
+```python
+PALETTE_3B1B = {
+    "primary": BLUE_C,
+    "secondary": GREEN_C,
+    "accent": YELLOW,
+    "highlight": GOLD,
+    "negative": RED_C,
+    "dim": GREY_B,
+    "bg": "#1a1a2e",
+}
+```
+
+### Warm Academic
+
+Muted, publication-friendly tones with warm accents. Good for formal talks where
+the vibrant palette feels too loud.
+
+```python
+PALETTE_ACADEMIC_WARM = {
+    "primary": "#2E86AB",
+    "secondary": "#A23B72",
+    "accent": "#F18F01",
+    "highlight": "#C73E1D",
+    "negative": "#592E83",
+    "dim": "#8B8B8B",
+    "bg": "#1C1C1C",
+}
+```
+
+### Neon Tech
+
+High-energy palette for tech demos, algorithm visualizations, and anything that
+should feel modern and electric.
+
+```python
+PALETTE_NEON = {
+    "primary": "#00F5FF",
+    "secondary": "#FF006E",
+    "accent": "#FFBE0B",
+    "highlight": "#8338EC",
+    "negative": "#FB5607",
+    "dim": "#555555",
+    "bg": "#0D0D0D",
+}
+```
+
+### Monochrome
+
+Minimalist grayscale with a single accent color. Forces you to communicate
+through shape, motion, and layout instead of color.
+
+```python
+PALETTE_MONO = {
+    "primary": WHITE,
+    "secondary": GREY_A,
+    "accent": YELLOW,
+    "highlight": WHITE,
+    "negative": GREY_C,
+    "dim": GREY_D,
+    "bg": BLACK,
+}
+```
+
+**Usage:** copy a preset into your `style.py`, then rename keys to semantic names
+for your domain. For example, in a neural network video you might rename
+`"primary"` to `"weights"` and `"negative"` to `"loss"`. The point is consistency
+across all your scenes, not the specific key names.
+
 ## How to use a palette consistently
 
 Create a `style.py` file and import it in every scene:

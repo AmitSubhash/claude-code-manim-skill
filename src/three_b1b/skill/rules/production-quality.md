@@ -407,7 +407,69 @@ This creates a narrative arc in visual density. Constant density (every scene ha
 11. At least one scene uses ValueTracker/always_redraw for live values
 12. Pipeline scenes show data transforming, not just dots sliding
 
-## 16. Known Failure Patterns (from production audits)
+## 16. Subtitle and Accessibility
+
+**Rule: Add subcaptions on every animation with meaningful content.**
+
+Manim can auto-generate `.srt` subtitle files via `add_subcaption()`. Use this for accessibility and for viewers watching without audio.
+
+```python
+class AccessibleScene(Scene):
+    def construct(self) -> None:
+        eq = MathTex(r"E = mc^2")
+        self.add_subcaption("Einstein's mass-energy equivalence equation appears.", duration=2)
+        self.play(Write(eq))
+        self.wait(1)
+
+        box = SurroundingRectangle(eq, color=YELLOW)
+        self.add_subcaption("The equation is highlighted.", duration=1.5)
+        self.play(Create(box))
+        self.wait(1)
+```
+
+To render with subtitles:
+```bash
+manim -qh --format mp4 scene.py MyScene
+# Produces: media/videos/scene/1080p60/MyScene.srt alongside the .mp4
+```
+
+**Rule: Minimum font size 20pt for all on-screen text.**
+
+Text smaller than 20pt becomes unreadable at 720p and on mobile devices. Use `font_size=20` as the floor for labels, annotations, and notes.
+
+```python
+# BAD: invisible at 720p
+label = Text("Source", font_size=14)
+
+# GOOD
+label = Text("Source", font_size=20)
+```
+
+**Rule: Color contrast for readability.**
+
+All text must be readable against its background. Common failures:
+
+| Bad combination | Fix |
+|----------------|-----|
+| Light yellow on white/light background | Use YELLOW_D or add a dark text shadow |
+| Light gray text on dark gray background | Use WHITE or increase opacity to 1.0 |
+| Red text on dark background | Use RED_A (lighter) or add stroke_width=2 |
+| Any text over a busy image or gradient | Add a semi-transparent background rectangle |
+
+```python
+# When text overlaps a complex background, add a backing rectangle
+text = Text("Key insight", font_size=24, color=WHITE)
+backing = Rectangle(
+    width=text.width + 0.4,
+    height=text.height + 0.2,
+    fill_color=BLACK,
+    fill_opacity=0.7,
+    stroke_width=0,
+).move_to(text)
+readable_text = VGroup(backing, text)
+```
+
+## 17. Known Failure Patterns (from production audits)
 
 These bugs recur across builds. Check for each explicitly:
 

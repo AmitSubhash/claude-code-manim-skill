@@ -157,6 +157,58 @@ Data: [any numbers, percentages, or chart data from paper]
 
 This goes into the agent prompt verbatim.
 
+## Narrative Arc Templates
+
+Choose one arc per video. The arc determines scene ordering and emotional pacing.
+
+### Discovery Arc
+question -> explore -> insight -> formalize
+
+Best for: pure math, visual proofs, "why does X work?"
+- Scene 1-2: Pose the question, show failed intuition
+- Scene 3-5: Explore visually, let patterns emerge
+- Scene 6-7: The "aha" insight
+- Scene 8+: Formalize with equations, show generality
+
+### Problem-Solution Arc
+problem -> failed attempt -> key insight -> solution
+
+Best for: engineering papers, optimization methods, systems design
+- Scene 1-2: Show the problem concretely (slow, broken, expensive)
+- Scene 3-4: Obvious approach and why it fails
+- Scene 5: The key insight that changes everything
+- Scene 6-8: Solution, results, implications
+
+### Comparison Arc
+method A -> method B -> head-to-head -> winner
+
+Best for: benchmark papers, A-vs-B evaluations, technique surveys
+- Scene 1-2: Method A explained
+- Scene 3-4: Method B explained
+- Scene 5-6: Head-to-head comparison (same data, same chart)
+- Scene 7: Winner declared with concrete numbers
+
+### Build-Up Arc
+simple case -> add complexity -> full picture
+
+Best for: tutorials, concept introductions, "from scratch" explanations
+- Scene 1-2: Simplest possible version (1D, 2 elements, toy data)
+- Scene 3-5: Add one dimension of complexity per scene
+- Scene 6-7: Full real-world version
+- Scene 8: Zoom out to see the complete picture
+
+## Per-Scene Variation Checklist
+
+Each scene MUST differ from its neighbors in at least 2 of these 4 dimensions:
+
+1. **Dominant color** -- the primary color that fills the most screen area
+2. **Layout template** -- FULL_CENTER, DUAL_PANEL, BUILD_UP, CHART_FOCUS, etc.
+3. **Animation entry direction** -- elements entering from LEFT, RIGHT, UP, or scaling in
+4. **Visual weight distribution** -- top-heavy, bottom-heavy, left-heavy, centered
+
+If two adjacent scenes share the same layout AND the same dominant color, one of them
+needs a redesign. Monotony kills engagement faster than complexity.
+
 ## Agent Prompt Structure
 
 Each scene agent prompt has 4 sections:

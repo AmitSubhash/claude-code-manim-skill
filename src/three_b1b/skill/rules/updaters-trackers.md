@@ -179,6 +179,35 @@ z_tracker.get_value()   # (1+2j)
 self.play(z_tracker.animate.set_value(3 - 1j), run_time=2)
 ```
 
+## Variable: a labeled value that updates itself
+
+The `Variable` mobject bundles a text label, an equals sign, and a `DecimalNumber`
+into one unit. It creates its own internal `ValueTracker`, so you do not need to
+manage one separately. This is cleaner than wiring up a manual
+ValueTracker + DecimalNumber + label for simple cases.
+
+```python
+var = Variable(2, Text("x"), num_decimal_places=2)
+# Displays: x = 2.00
+
+self.play(Write(var))
+self.play(var.tracker.animate.set_value(5), run_time=2)
+# The displayed value smoothly transitions from 2.00 to 5.00
+```
+
+Access the internal tracker with `var.tracker`. You can also use `Variable` with
+`MathTex` labels:
+
+```python
+var = Variable(0, MathTex(r"\alpha"), num_decimal_places=3)
+self.play(var.tracker.animate.set_value(PI), run_time=3)
+```
+
+**When to use Variable vs manual ValueTracker + DecimalNumber:**
+- `Variable`: you want a simple "label = value" readout and nothing else.
+- Manual setup: you need custom positioning, multiple readouts from one tracker,
+  or the value drives other objects beyond the label.
+
 ## Practical patterns (complete examples)
 
 ### Pattern 1: Label following a point on a graph

@@ -33,6 +33,7 @@ These are the most common failures. Load [rules/troubleshooting.md](rules/troubl
 11. **`reference = mob` is NOT a copy** -- use `mob.copy()` for independent objects.
 12. **Transparent background** -- mp4 has no alpha. Use `--format webm -t`.
 13. **`VGroup.add(mob.animate.move_to(...))` crashes** -- `.animate` returns an `_AnimationBuilder`, not a VMobject. Only use `.animate` inside `self.play()`.
+14. **`Group.save_state()` crashes** -- `Group` does not support `save_state()`/`restore()`. Convert to `VGroup` first, or manually store and restore positions.
 
 ## Scripts and Templates
 
@@ -84,13 +85,14 @@ Load the relevant rule file for the task at hand. Claude should read only what i
 - [rules/moving-camera.md](rules/moving-camera.md) -- MovingCameraScene, zoom, pan, follow
 
 ### Visual Design (read for any explainer video)
-- [rules/visual-design-principles.md](rules/visual-design-principles.md) -- **16 core principles** from Tufte, Bret Victor, 3Blue1Brown: opacity layering, persistent context, geometry before algebra, question frames, concrete values, density ramp
+- [rules/visual-design-principles.md](rules/visual-design-principles.md) -- **17 core principles** from Tufte, Bret Victor, 3Blue1Brown: opacity layering, persistent context, geometry before algebra, question frames, concrete values, density ramp, monospace text
 - [rules/visual-design-catalog.md](rules/visual-design-catalog.md) -- **26 implementable patterns** from 3b1b frame analysis + production learnings: probability sidebars, skip arcs, grid fills, interactive sliders, heatmaps, live pipeline data flow, linked dual panels, camera zoom detail, and more
 
 ### Video Production
 - [rules/scene-planning.md](rules/scene-planning.md) -- **START HERE for multi-scene videos.** Layout templates, scene plans, agent prompt structure, style.py contract
 - [rules/paper-explainer.md](rules/paper-explainer.md) -- explainer video structure, domain patterns
 - [rules/production-quality.md](rules/production-quality.md) -- spatial layout, alignment, container bounds, data viz minimums, pre/post-render quality checks
+- [rules/voiceover.md](rules/voiceover.md) -- voiceover backends, teaching text, beat-aware narration, CLI workflow
 - [rules/animation-design-thinking.md](rules/animation-design-thinking.md) -- pacing, narration sync, animate vs static
 - [rules/project-organization.md](rules/project-organization.md) -- multi-scene projects, style.py, render scripts
 - [rules/remotion-integration.md](rules/remotion-integration.md) -- Manim + Remotion pipeline

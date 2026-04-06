@@ -317,3 +317,125 @@ manim --renderer opengl scene.py MyScene
 | Many objects | Use `VGroup` and batch operations instead of individual animations |
 | Long videos | Use `self.next_section()` to render sections independently |
 | Final render | `manim -qh` (1080p) or `manim -qk` (4K) |
+
+## Production Audit Failures
+
+These 10 patterns recur across multi-scene builds. Each was found via frame-by-frame
+audit and is now a mandatory check.
+
+### Text centering with \n
+
+**Bug:** `Text("Line one\nLine two").move_to(ORIGIN)` left-aligns lines within the bounding box.
+
+**Fix:** Use `safe_multiline()` or build a VGroup of separate Text objects:
+```python
+# BAD
+question = Text("Line one\nLine two")
+question.move_to(ORIGIN)
+
+# GOOD
+question = safe_multiline("Line one", "Line two")
+question.move_to(ORIGIN)
+```
+
+### next_to() overflow stacking
+
+**Bug:** `tags.next_to(box, RIGHT)` when box is at x=3.5 pushes tags off-screen. Guard code that clamps x drops them ON TOP of the box.
+
+**Fix:** Place auxiliary elements BELOW (DOWN) when the source is at |x| > 2.5:
+```python
+# BAD
+label.next_to(edge_box, RIGHT, buff=0.4)
+
+# GOOD
+label.next_to(edge_box, DOWN, buff=0.3)
+```
+
+### Title dimmed, not removed
+
+**Bug:** `title.animate.set_opacity(0.35)` leaves a ghost. New text then overlaps the faded title.
+
+**Fix:** Always `FadeOut(title)` completely. Dimming is not lifecycle removal.
+
+### Child covers labeled_box label
+
+**Bug:** `child.move_to(box.get_center())` hides the label text inside a labeled_box.
+
+**Fix:** Offset children downward: `child.move_to(box.get_center() + DOWN * 0.3)`.
+
+### Scale truncates labels
+
+**Bug:** Scaling boxes for split-view makes "Instruction Cache" become "Instr".
+
+**Fix:** Use short labels for reduced-size layouts: `labeled_box("I-Cache", width=2.0)`.
+
+### Dim opacity bleeds under overlay text
+
+**Bug:** Pipeline at DIM_OPACITY=0.1 still visible through white text overlay on dark backgrounds.
+
+**Fix:** `FadeOut(pipeline)` completely when text needs a clean background. Only dim when the dimmed element stays BESIDE new content, never UNDER it.
+
+### Empty transition frames
+
+**Bug:** Between phases, only the title visible with 80% empty screen.
+
+**Fix:** Combine FadeOut and Write in the same `self.play()` call:
+```python
+# BAD
+self.play(FadeOut(*phase1))
+self.play(Write(new_title))
+
+# GOOD
+self.play(FadeOut(*phase1), Write(new_title))
+```
+
+### Arrow tip crowding
+
+**Bug:** Arrow between adjacent boxes has tip overlapping box label.
+
+**Fix:** Use `buff=0.25` minimum. For boxes less than 1.5 units apart, use `buff=0.3` or set `max_tip_length_to_length_ratio=0.15`.
+
+### Write() on bottom notes
+
+**Bug:** `Write(note)` creates garbled partial-stroke frames at small font sizes.
+
+**Fix:** Use `FadeIn(note, shift=UP * 0.2)` for all bottom notes.
+
+### Chart legend overlap
+
+**Bug:** Legend placed in upper-left where curves converge.
+
+**Fix:** Place the legend in the corner with LEAST data density. For rising curves, use lower-right. For falling curves, use upper-right.
+
+## Agent Code Generation Errors
+
+These bugs come from parallel agent scene generation and are not caught by `py_compile`.
+
+### .animate added to VGroup (silent dead code)
+
+**Bug:** Agent writes `group.add(obj.animate.move_to(ORIGIN))`. `.animate` returns an `_AnimationBuilder`, not a VMobject. The line silently does nothing useful.
+
+**Fix:** Only use `.animate` inside `self.play()`. After generation, grep for `\.add\(.*\.animate` as a lint check.
+
+### manim not in PATH
+
+**Bug:** `render_all.sh` fails with "manim: command not found" because pip installed it to a venv not on the user's PATH.
+
+**Fix:** Verify with `which manim` before creating render scripts. Use `python3 -m manim` as a fallback in scripts:
+```bash
+MANIM_CMD="${MANIM_CMD:-$(command -v manim || echo 'python3 -m manim')}"
+$MANIM_CMD -ql "$FILE" "$CLASS"
+```
+
+### ffmpeg concat needs absolute paths
+
+**Bug:** `ffmpeg -f concat` with relative paths resolves them relative to the list file location, not the working directory.
+
+**Fix:** Always use absolute paths in ffmpeg concat file lists:
+```bash
+# Generate list with absolute paths
+for f in media/videos/*/1080p60/*.mp4; do
+    echo "file '$(realpath "$f")'"
+done > /tmp/concat_list.txt
+ffmpeg -f concat -safe 0 -i /tmp/concat_list.txt -c copy output.mp4
+```
