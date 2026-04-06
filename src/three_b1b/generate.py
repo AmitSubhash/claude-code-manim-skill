@@ -183,7 +183,7 @@ def _call_claude_code(user_msg: str, model: str, system: str) -> str:
         sys.exit(1)
     try:
         result = subprocess.run(
-            ["claude", "-p", "--model", model, "--system-prompt", system, "--tools", ""],
+            ["claude", "-p", "--model", model, "--system-prompt", system],
             input=user_msg, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
@@ -193,7 +193,10 @@ def _call_claude_code(user_msg: str, model: str, system: str) -> str:
         click.echo("Failed to run claude -p.")
         sys.exit(1)
     if result.returncode != 0:
+        stderr = result.stderr.strip()
         click.echo(f"claude -p failed (exit {result.returncode}).")
+        if stderr:
+            click.echo(stderr)
         sys.exit(1)
     return result.stdout.strip()
 
@@ -258,6 +261,16 @@ def _render_scene(scene_file: Path, quality: str) -> None:
               type=click.Choice(["auto", "machine-learning", "mathematics", "physics", "biology", "security", "neuroscience", "algorithms"]),
               default="auto", show_default=True,
               help="Academic domain (auto-detect if omitted).")
+@click.option("--single-scene", "-1", is_flag=True,
+              help="Generate one self-contained scene (skip planning).")
+@click.option("--duration", type=int, default=30, show_default=True,
+              help="Target duration in seconds (single-scene mode).")
+@click.option("--template", "-t",
+              type=click.Choice(["FULL_CENTER", "DUAL_PANEL", "BUILD_UP",
+                                 "TOP_PERSISTENT_BOTTOM_CONTENT",
+                                 "CHART_FOCUS", "GRID_CARDS"]),
+              default="FULL_CENTER", show_default=True,
+              help="Layout template (single-scene mode).")
 def generate(
     topic: str,
     provider: Optional[str],
@@ -270,6 +283,9 @@ def generate(
     quality: str,
     audience: str,
     domain: str,
+    single_scene: bool,
+    duration: int,
+    template: str,
 ) -> None:
     """Generate a Manim explainer video from TOPIC.
 
@@ -277,15 +293,18 @@ def generate(
     plans, style contract), shows you the plan for review, then generates
     complete Manim code following the skill's layout templates and rules.
 
+    Use --single-scene / -1 to skip planning and generate one scene directly.
+
     \b
     Examples:
       3brown1blue generate "backpropagation" -p claude-code
       3brown1blue generate "Fourier transform" --provider openai --render
       3brown1blue generate "attention mechanism" -p anthropic --render -q h
       3brown1blue generate "neural ODEs" -a graduate -d machine-learning
+      3brown1blue generate "dot product" -1 -p claude-code --render
+      3brown1blue generate "softmax" -1 --duration 20 --template BUILD_UP
     """
-    from .prompts import RESEARCH_AND_PLAN, GENERATE_FROM_PLAN
-    from ._shared import prompt_provider, confirm_plan
+    from ._shared import prompt_provider
 
     if provider is None:
         provider = prompt_provider()
@@ -294,6 +313,34 @@ def generate(
     model = model or cfg["default_model"]
     plan_model = plan_model or model
     api_key = _resolve_api_key(provider, api_key)
+
+    if single_scene:
+        from .prompts import SINGLE_SCENE
+
+        click.echo(f"\nSingle scene: \"{topic}\"")
+        click.echo(f"Provider: {cfg['label']}  ({model})")
+        click.echo(f"Template: {template}  Duration: ~{duration}s")
+        click.echo(f"Audience: {audience}  Domain: {domain}")
+
+        raw = call_llm(
+            provider, model, api_key,
+            SINGLE_SCENE.format(
+                topic=topic, audience=audience, domain=domain,
+                duration=duration, template=template,
+            ),
+            audience=audience, domain=domain,
+        )
+        code = _extract_code(raw)
+        out_path = Path(output)
+        out_path.write_text(code)
+        click.echo(f"Saved: {out_path}")
+
+        if render:
+            _render_scene(out_path, quality)
+        return
+
+    from .prompts import RESEARCH_AND_PLAN, GENERATE_FROM_PLAN
+    from ._shared import confirm_plan
 
     # Step 1: Research and plan
     click.echo(f"\nPlanning: \"{topic}\"")

@@ -56,6 +56,23 @@ uvx '3brown1blue[anthropic]' generate "Fourier transforms" --render
 3brown1blue generate "attention mechanism" -p claude-code --plan-output attention_plan.md
 ```
 
+### Quick single-scene mode
+
+Skip the planning step and generate one self-contained scene directly. Great for quick explanations, demos, or testing a concept:
+
+```bash
+# one scene, default 30s, FULL_CENTER layout
+3brown1blue generate "dot product" -1 -p claude-code --render
+
+# custom duration and layout template
+3brown1blue generate "softmax function" -1 --duration 20 --template BUILD_UP -p claude-code
+
+# with audience and domain
+3brown1blue generate "gradient descent" -1 -a undergrad -d machine-learning -p anthropic --render
+```
+
+Flags: `-1` / `--single-scene`, `--duration` (seconds), `--template` (layout).
+
 ## Generate from slides
 
 Extract content from a PowerPoint deck, plan a video, and generate Manim code. Auto-detects whether vision extraction is needed for diagram-heavy slides.
@@ -66,11 +83,14 @@ pip install '3brown1blue[slides]'
 3brown1blue from-slides research_talk.pptx -a graduate -d neuroscience -p anthropic
 ```
 
-## Generate voiceover with VibeVoice-Realtime
+## Generate voiceover
 
-Experimental single-speaker narration workflow using Microsoft's open-source
-VibeVoice-Realtime model. This is the supported path for narration right now;
-the older multi-speaker VibeVoice-TTS release was removed upstream.
+The narration pipeline now supports two open-source single-speaker backends:
+
+- `vibevoice`: Microsoft's VibeVoice-Realtime with prompt-based speaker packs
+- `kokoro`: Kokoro-82M with a larger built-in voice inventory and speed control
+
+### VibeVoice-Realtime
 
 Install VibeVoice separately in the same environment:
 
@@ -86,14 +106,52 @@ Then save a video plan and turn its `## Narration Script` into per-scene WAVs:
 3brown1blue generate "backpropagation" -p claude-code --plan-output backprop_plan.md
 
 3brown1blue voiceover backprop_plan.md \
+  --backend vibevoice \
   --voices-dir /path/to/VibeVoice/demo/voices/streaming_model \
   --speaker-name Carter \
   --output-dir backprop_voice
+
+# mux the generated WAVs onto rendered scene videos
+3brown1blue compose-voiceover videos/backprop_project \
+  --audio-dir backprop_voice \
+  --quality l
 ```
 
 You can also point `voiceover` at a project directory. It will first look for
 `# NARRATION:` comments in `scene_*.py`, then fall back to `narration.md`,
-`plan.md`, `video_plan.md`, or `storyboard.md`.
+`plan.md`, `video_plan.md`, or `storyboard.md`. In `auto` mode, project
+comments are preferred because they can be grouped into timed beat audio that
+aligns better with `self.play()` blocks during `compose-voiceover`.
+
+To explore more English speaker styles, download the experimental voice packs:
+
+```bash
+bash /path/to/VibeVoice/demo/download_experimental_voices.sh
+3brown1blue voiceover my_project --backend vibevoice --voices-dir /path/to/VibeVoice/demo/voices/streaming_model --list-voices
+```
+
+### Kokoro
+
+Kokoro works best from a dedicated Python 3.11 runtime so it does not disturb
+the main project environment:
+
+```bash
+python3.11 -m venv .tts311
+./.tts311/bin/pip install 'kokoro>=0.9.4' 'misaki[en]' soundfile
+```
+
+Then generate narration with a built-in voice or a voice mix:
+
+```bash
+3brown1blue voiceover videos/backprop_project \
+  --backend kokoro \
+  --kokoro-python .tts311/bin/python \
+  --speaker-name af_bella,af_sarah \
+  --speech-speed 1.2 \
+  --output-dir voiceover_audio_kokoro
+
+3brown1blue voiceover videos/backprop_project --backend kokoro --list-voices
+```
 
 ## Audience levels
 
@@ -147,6 +205,7 @@ Each domain includes a visual vocabulary, preferred layout templates, 5 domain-s
 3brown1blue generate TOPIC [OPTIONS]
 3brown1blue from-slides DECK [OPTIONS]
 3brown1blue voiceover SOURCE [OPTIONS]
+3brown1blue compose-voiceover PROJECT_DIR [OPTIONS]
 3brown1blue install [--platform] [--force]
 3brown1blue uninstall [--platform]
 3brown1blue update [--platform]
@@ -171,15 +230,30 @@ Common options for generate/from-slides:
 Voiceover options:
 ```
   --project-dir -d   project directory for scene-name matching
+  --source-mode      auto | scene-comments | plan  [default: auto]
+  --backend          vibevoice | kokoro  [default: vibevoice]
   --model-path       VibeVoice-Realtime model id/path
   --speaker-name     voice preset name  [default: Carter]
   --voice-prompt     explicit .pt voice prompt file
   --voices-dir       directory containing VibeVoice voice prompts
+  --kokoro-python    Python 3.11 runtime for Kokoro
+  --kokoro-lang      Kokoro language code  [default: a]
+  --speech-speed     Kokoro speech rate  [default: 1.15]
   --output-dir -o    output directory for wav files
   --device           auto | cuda | mps | cpu  [default: auto]
   --cfg-scale        guidance scale  [default: 1.5]
   --ddpm-steps       diffusion steps  [default: 5]
   --list-voices      list available prompts and exit
+```
+
+Compose voiceover options:
+```
+  --audio-dir -a     directory containing per-scene wav files
+  --quality -q       l=480p15 | m=720p30 | h=1080p60 | k=2160p60
+  --output-dir -o    directory for narrated per-scene mp4 files
+  --final-output     optional explicit path for final narrated mp4
+  --audio-fit        extend | atempo | hybrid  [default: hybrid]
+  --max-atempo       max narration speed-up when fitting audio  [default: 1.35]
 ```
 
 ## Showcase

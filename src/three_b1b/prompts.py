@@ -6,6 +6,34 @@ layout templates, scene plan format, production rules, and style.py contract
 defined in the skill rules.
 """
 
+# ── Single-scene quick generation (--single-scene flag) ──────────────────
+
+SINGLE_SCENE = """\
+TOPIC: {topic}
+AUDIENCE: {audience}
+DOMAIN: {domain}
+
+Generate ONE self-contained Manim scene that explains this topic in {duration} seconds.
+
+RULES:
+1. One Scene subclass, one construct() method, one file
+2. Layout template: {template}
+3. Start with a title, end with a bottom note takeaway
+4. Geometry before algebra: show the visual first, then the equation
+5. Use Write() for text, Create() for shapes
+6. MathTex without dollar signs
+7. safe_text() pattern: cap width at 12 Manim units
+8. self.wait() after every major reveal
+9. Fill 50%+ of frame, no large empty regions
+10. x in [-5.5, 5.5], y in [-3.2, 3.2]
+11. Add # NARRATION: comments for voiceover beats
+12. Font: use font="Menlo" for all Text() objects
+13. Use named color constants, never raw hex inline
+14. Include concrete values and examples, not abstract descriptions
+
+Output a complete, runnable Python file. No explanation outside the code.\
+"""
+
 # ── Topic-based generation (generate command) ─────────────────────────────
 
 RESEARCH_AND_PLAN = """\
