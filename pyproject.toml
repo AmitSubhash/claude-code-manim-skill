@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "3brown1blue"
-version = "0.3.0"
+version = "0.3.1"
 description = "Generate 3Blue1Brown-style Manim explainer videos from topics or slide decks"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Amit T Subhash", email = "atsubhas@iu.edu" },
 ]

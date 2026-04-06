@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/header.gif" alt="3brown1blue banner" width="800">
+  <img src="https://raw.githubusercontent.com/AmitSubhash/3brown1blue/main/assets/header.gif" alt="3brown1blue banner" width="800">
 </p>
 
 # 3brown1blue
 
 Generate 3Blue1Brown-style Manim explainer videos from topics or slide decks, or install the Manim skill into your AI coding tool.
 
-## What's new in v0.2.5
+## What's new in v0.3.0
 
 **Audience-aware generation** -- videos now adapt to who's watching:
 

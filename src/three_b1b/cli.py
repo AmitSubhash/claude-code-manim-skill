@@ -226,7 +226,7 @@ def _uninstall_copilot() -> None:
 # ── CLI ────────────────────────────────────────────────────────────────────
 
 @click.group()
-@click.version_option()
+@click.version_option(package_name="3brown1blue", prog_name="3brown1blue")
 def main() -> None:
     """3brown1blue: AI-powered Manim explainer videos.
 
