@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "3brown1blue"
-version = "0.2.5"
+version = "0.3.0"
 description = "Generate 3Blue1Brown-style Manim explainer videos from topics or slide decks"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [
-    { name = "Amit Subhasish", email = "atsubhas@iu.edu" },
+    { name = "Amit T Subhash", email = "atsubhas@iu.edu" },
 ]
 keywords = ["manim", "animation", "explainer", "3blue1brown", "claude", "cursor", "windsurf", "copilot", "math", "visualization"]
 classifiers = [
@@ -30,6 +30,11 @@ dependencies = [
     "click>=8.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/AmitSubhash/3brown1blue"
+Repository = "https://github.com/AmitSubhash/3brown1blue"
+Issues = "https://github.com/AmitSubhash/3brown1blue/issues"
+
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
 openai    = ["openai>=1.0"]
@@ -38,7 +43,6 @@ groq      = ["openai>=1.0"]
 mistral   = ["openai>=1.0"]
 slides    = ["python-pptx>=0.6"]
 all       = ["anthropic>=0.40", "openai>=1.0", "python-pptx>=0.6"]
-
 
 [project.scripts]
 3brown1blue = "three_b1b.cli:main"
