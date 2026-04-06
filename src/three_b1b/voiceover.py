@@ -1,10 +1,13 @@
-"""voiceover command: generate single-speaker narration audio with VibeVoice."""
+"""voiceover command: generate single-speaker narration audio."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -14,8 +17,15 @@ import click
 from .edit_scene import _discover_scenes, _find_project_dir
 
 DEFAULT_MODEL_PATH = "microsoft/VibeVoice-Realtime-0.5B"
+DEFAULT_BACKEND = "vibevoice"
 DEFAULT_SPEAKER = "Carter"
+DEFAULT_SOURCE_MODE = "auto"
 DEFAULT_VOICE_DIR_ENV = "VIBEVOICE_VOICES_DIR"
+DEFAULT_KOKORO_LANG = "a"
+DEFAULT_KOKORO_SPEAKER = "af_bella,af_sarah"
+DEFAULT_KOKORO_SPEED = 1.15
+DEFAULT_KOKORO_PYTHON_ENV = "THREE_B1B_KOKORO_PYTHON"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _MARKDOWN_CANDIDATES = (
     "narration.md",
@@ -44,12 +54,23 @@ _LATEX_SPOKEN = {
 
 
 @dataclass
+class NarrationBeat:
+    """A narration unit aligned to one scene beat."""
+
+    beat_index: int
+    text: str
+    source_label: str
+    target_duration: float
+
+
+@dataclass
 class NarrationChunk:
-    """A single narration block destined for one output audio file."""
+    """A narration block destined for one output audio file."""
 
     slug: str
     text: str
     source_label: str
+    beats: Optional[list[NarrationBeat]] = None
 
 
 def _normalize_for_tts(text: str) -> str:
@@ -63,6 +84,9 @@ def _normalize_for_tts(text: str) -> str:
     cleaned = cleaned.replace("&", " and ")
     cleaned = cleaned.replace("%", " percent")
     cleaned = cleaned.replace("~", " approximately ")
+    cleaned = cleaned.replace("vs.", "versus")
+    cleaned = cleaned.replace("e.g.", "for example")
+    cleaned = cleaned.replace("i.e.", "that is")
     cleaned = re.sub(r"\\text\{([^}]*)\}", r"\1", cleaned)
     cleaned = re.sub(r"\\mathbf\{([^}]*)\}", r"\1", cleaned)
     cleaned = re.sub(r"\\mathcal\{([^}]*)\}", r"\1", cleaned)
@@ -94,20 +118,122 @@ def _extract_scene_comment_narration(scene_file: Path) -> list[str]:
     return matches
 
 
+def _collect_call(lines: list[str], start_idx: int, token: str) -> tuple[str, int]:
+    """Collect a multi-line self.play()/self.wait() call."""
+    parts: list[str] = []
+    depth = 0
+    started = False
+    idx = start_idx
+    while idx < len(lines):
+        line = lines[idx]
+        if not started:
+            pos = line.find(token)
+            if pos == -1:
+                return "", start_idx + 1
+            fragment = line[pos:]
+            parts.append(fragment)
+            depth = fragment.count("(") - fragment.count(")")
+            started = True
+            idx += 1
+            if depth <= 0:
+                return "\n".join(parts), idx
+            continue
+
+        parts.append(line)
+        depth += line.count("(") - line.count(")")
+        idx += 1
+        if depth <= 0:
+            return "\n".join(parts), idx
+
+    return "\n".join(parts), idx
+
+
+def _duration_from_statement(statement: str) -> float:
+    """Estimate duration from self.play()/self.wait() source."""
+    stripped = statement.strip()
+    if stripped.startswith("self.wait("):
+        match = re.search(r"self\.wait\(\s*([0-9.]+)", stripped)
+        return float(match.group(1)) if match else 1.0
+    if stripped.startswith("self.play("):
+        match = re.search(r"run_time\s*=\s*([0-9.]+)", stripped)
+        return float(match.group(1)) if match else 1.0
+    return 0.0
+
+
+def _sum_statement_durations(lines: list[str]) -> float:
+    """Sum durations of self.play()/self.wait() calls in a block."""
+    total = 0.0
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        if "self.play(" in line:
+            statement, idx = _collect_call(lines, idx, "self.play(")
+            total += _duration_from_statement(statement)
+            continue
+        if "self.wait(" in line:
+            statement, idx = _collect_call(lines, idx, "self.wait(")
+            total += _duration_from_statement(statement)
+            continue
+        idx += 1
+    return total
+
+
+def _extract_scene_comment_beats(scene_file: Path) -> list[NarrationBeat]:
+    """Extract grouped narration beats from a scene file."""
+    lines = scene_file.read_text().splitlines()
+    beats: list[NarrationBeat] = []
+    idx = 0
+    while idx < len(lines):
+        match = re.match(r'^\s*#\s*NARRATION:\s*(.+?)\s*$', lines[idx])
+        if match is None:
+            idx += 1
+            continue
+
+        comment_lines: list[str] = []
+        while idx < len(lines):
+            match = re.match(r'^\s*#\s*NARRATION:\s*(.+?)\s*$', lines[idx])
+            if match is None:
+                break
+            text = match.group(1).strip().strip('"').strip("'")
+            if text:
+                comment_lines.append(text)
+            idx += 1
+
+        block_end = idx
+        while block_end < len(lines):
+            if re.match(r'^\s*#\s*NARRATION:\s*(.+?)\s*$', lines[block_end]):
+                break
+            block_end += 1
+
+        beat_text = _normalize_for_tts(" ".join(comment_lines))
+        if beat_text:
+            beats.append(
+                NarrationBeat(
+                    beat_index=len(beats) + 1,
+                    text=beat_text,
+                    source_label=f"{scene_file.name} beat {len(beats) + 1}",
+                    target_duration=_sum_statement_durations(lines[idx:block_end]),
+                )
+            )
+        idx = block_end
+    return beats
+
+
 def _chunks_from_scene_comments(project_dir: Path) -> list[NarrationChunk]:
     """Build narration chunks from scene-level NARRATION comments."""
     chunks: list[NarrationChunk] = []
     for scene in _discover_scenes(project_dir):
-        lines = _extract_scene_comment_narration(scene["file"])
-        if not lines:
+        beats = _extract_scene_comment_beats(scene["file"])
+        if not beats:
             continue
-        text = _normalize_for_tts(" ".join(lines))
+        text = _normalize_for_tts(" ".join(beat.text for beat in beats))
         if text:
             chunks.append(
                 NarrationChunk(
                     slug=scene["file"].stem,
                     text=text,
                     source_label=scene["file"].name,
+                    beats=beats,
                 )
             )
     return chunks
@@ -243,6 +369,7 @@ def _find_markdown_candidate(project_dir: Path) -> Optional[Path]:
 def _load_narration_chunks(
     source: Path,
     project_dir: Optional[Path],
+    source_mode: str,
 ) -> tuple[list[NarrationChunk], Optional[Path]]:
     """Load narration chunks from a file or project directory."""
     if source.is_dir():
@@ -256,7 +383,23 @@ def _load_narration_chunks(
             return [], project_dir
         source = markdown
 
+    if project_dir is not None and source_mode in ("auto", "scene-comments"):
+        comment_chunks = _chunks_from_scene_comments(project_dir)
+        if comment_chunks:
+            return comment_chunks, project_dir
+
     if source.suffix == ".py":
+        beats = _extract_scene_comment_beats(source)
+        if beats:
+            return [
+                NarrationChunk(
+                    slug=source.stem,
+                    text=_normalize_for_tts(" ".join(beat.text for beat in beats)),
+                    source_label=source.name,
+                    beats=beats,
+                )
+            ], project_dir
+
         lines = _extract_scene_comment_narration(source)
         text = _normalize_for_tts(" ".join(lines))
         if not text:
@@ -456,17 +599,221 @@ def _generate_audio_file(
     processor.save_audio(outputs.speech_outputs[0], output_path=str(output_path))
 
 
-def _write_manifest(output_dir: Path, chunks: list[NarrationChunk]) -> Path:
-    """Write a simple markdown manifest of generated files."""
-    manifest = output_dir / "manifest.md"
+def _concat_wavs(
+    beat_paths: list[Path],
+    output_path: Path,
+    target_durations: list[float],
+) -> None:
+    """Concatenate beat wavs into one scene wav, padding short beats with silence."""
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError:
+        click.echo("Run: pip install soundfile numpy")
+        sys.exit(1)
+
+    pieces = []
+    sample_rate: Optional[int] = None
+    for idx, beat_path in enumerate(beat_paths):
+        data, sr = sf.read(beat_path)
+        if sample_rate is None:
+            sample_rate = sr
+        elif sr != sample_rate:
+            click.echo(f"Sample rate mismatch in {beat_path.name}")
+            sys.exit(1)
+
+        if getattr(data, "ndim", 1) > 1:
+            data = data[:, 0]
+
+        target_seconds = target_durations[idx] if idx < len(target_durations) else 0.0
+        target_samples = int(round(max(target_seconds, 0.0) * sr))
+        if target_samples > len(data):
+            pad = np.zeros(target_samples - len(data), dtype=data.dtype)
+            data = np.concatenate([data, pad])
+
+        pieces.append(data)
+
+    if not pieces or sample_rate is None:
+        click.echo("No beat audio generated.")
+        sys.exit(1)
+
+    sf.write(output_path, np.concatenate(pieces), sample_rate)
+
+
+def _write_manifests(output_dir: Path, chunks: list[NarrationChunk]) -> tuple[Path, Path]:
+    """Write markdown and JSON voiceover manifests."""
+    manifest_md = output_dir / "manifest.md"
     lines = [
         "# Voiceover Manifest",
         "",
     ]
     for chunk in chunks:
         lines.append(f"- `{chunk.slug}.wav`: {chunk.source_label}")
-    manifest.write_text("\n".join(lines) + "\n")
-    return manifest
+        if chunk.beats:
+            for beat in chunk.beats:
+                beat_name = f"_beats/{chunk.slug}/beat_{beat.beat_index:02d}.wav"
+                lines.append(
+                    f"  - `{beat_name}`: target {beat.target_duration:.2f}s"
+                )
+    manifest_md.write_text("\n".join(lines) + "\n")
+
+    manifest_json = output_dir / "manifest.json"
+    payload = {
+        "version": 1,
+        "scenes": [],
+    }
+    for chunk in chunks:
+        scene_entry = {
+            "slug": chunk.slug,
+            "source_label": chunk.source_label,
+            "scene_audio": f"{chunk.slug}.wav",
+            "beats": [],
+        }
+        if chunk.beats:
+            for beat in chunk.beats:
+                scene_entry["beats"].append(
+                    {
+                        "beat_index": beat.beat_index,
+                        "text": beat.text,
+                        "source_label": beat.source_label,
+                        "target_duration": beat.target_duration,
+                        "audio": f"_beats/{chunk.slug}/beat_{beat.beat_index:02d}.wav",
+                    }
+                )
+        payload["scenes"].append(scene_entry)
+    manifest_json.write_text(json.dumps(payload, indent=2) + "\n")
+    return manifest_md, manifest_json
+
+
+def _resolve_kokoro_python(explicit_path: Optional[Path]) -> Path:
+    """Resolve the Python executable used for Kokoro synthesis."""
+    if explicit_path is not None:
+        return explicit_path.resolve()
+
+    env_path = os.environ.get(DEFAULT_KOKORO_PYTHON_ENV, "").strip()
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+
+    local_env = REPO_ROOT / ".tts311" / "bin" / "python"
+    if local_env.exists():
+        return local_env.resolve()
+
+    raise click.ClickException(
+        "Kokoro backend requested, but no helper runtime was found.\n"
+        f"Set {DEFAULT_KOKORO_PYTHON_ENV}, or create {local_env}."
+    )
+
+
+def _run_kokoro_bridge(args: list[str]) -> str:
+    """Run the Kokoro helper script and return stdout."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or result.stdout.strip() or "unknown Kokoro error"
+        raise click.ClickException(stderr)
+    return result.stdout.strip()
+
+
+def _list_kokoro_voices(kokoro_python: Path) -> list[str]:
+    """Return published Kokoro voices from the helper runtime."""
+    output = _run_kokoro_bridge(
+        [
+            str(kokoro_python),
+            str(REPO_ROOT / "src" / "three_b1b" / "kokoro_bridge.py"),
+            "--list-voices",
+        ]
+    )
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise click.ClickException("Could not parse Kokoro voice list.") from exc
+    return list(payload.get("voices", []))
+
+
+def _build_kokoro_job(
+    chunks: list[NarrationChunk],
+    output_dir: Path,
+    speaker_name: str,
+    lang_code: str,
+    device: str,
+    speech_speed: float,
+) -> dict:
+    """Serialize narration chunks for the Kokoro helper."""
+    scenes: list[dict] = []
+    for chunk in chunks:
+        scene_entry = {
+            "slug": chunk.slug,
+            "text": chunk.text,
+            "scene_output": str((output_dir / f"{chunk.slug}.wav").resolve()),
+            "beats": [],
+        }
+        if chunk.beats:
+            for beat in chunk.beats:
+                scene_entry["beats"].append(
+                    {
+                        "beat_index": beat.beat_index,
+                        "text": beat.text,
+                        "target_duration": beat.target_duration,
+                        "output_path": str(
+                            (
+                                output_dir
+                                / "_beats"
+                                / chunk.slug
+                                / f"beat_{beat.beat_index:02d}.wav"
+                            ).resolve()
+                        ),
+                    }
+                )
+        scenes.append(scene_entry)
+
+    return {
+        "device": device,
+        "lang_code": lang_code,
+        "speaker_name": speaker_name,
+        "speed": speech_speed,
+        "scenes": scenes,
+    }
+
+
+def _generate_with_kokoro(
+    kokoro_python: Path,
+    chunks: list[NarrationChunk],
+    output_dir: Path,
+    speaker_name: str,
+    lang_code: str,
+    device: str,
+    speech_speed: float,
+) -> str:
+    """Generate narration with Kokoro via the external Python 3.11 runtime."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    job = _build_kokoro_job(
+        chunks=chunks,
+        output_dir=output_dir,
+        speaker_name=speaker_name,
+        lang_code=lang_code,
+        device=device,
+        speech_speed=speech_speed,
+    )
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".json",
+        prefix="kokoro_job_",
+        dir=output_dir,
+        delete=False,
+    ) as handle:
+        json.dump(job, handle, indent=2)
+        job_path = Path(handle.name)
+
+    try:
+        return _run_kokoro_bridge(
+            [
+                str(kokoro_python),
+                str(REPO_ROOT / "src" / "three_b1b" / "kokoro_bridge.py"),
+                "--job",
+                str(job_path),
+            ]
+        )
+    finally:
+        job_path.unlink(missing_ok=True)
 
 
 @click.command()
@@ -478,6 +825,20 @@ def _write_manifest(output_dir: Path, chunks: list[NarrationChunk]) -> Path:
     help="Project directory for matching narration blocks to scene filenames.",
 )
 @click.option(
+    "--source-mode",
+    type=click.Choice(["auto", "scene-comments", "plan"]),
+    default=DEFAULT_SOURCE_MODE,
+    show_default=True,
+    help="Prefer scene comments or plan narration when both are available.",
+)
+@click.option(
+    "--backend",
+    type=click.Choice(["vibevoice", "kokoro"]),
+    default=DEFAULT_BACKEND,
+    show_default=True,
+    help="Speech backend to use.",
+)
+@click.option(
     "--model-path",
     default=DEFAULT_MODEL_PATH,
     show_default=True,
@@ -487,19 +848,38 @@ def _write_manifest(output_dir: Path, chunks: list[NarrationChunk]) -> Path:
     "--speaker-name",
     default=DEFAULT_SPEAKER,
     show_default=True,
-    help="Voice preset name to resolve inside --voices-dir.",
+    help="Voice preset name for the selected backend.",
 )
 @click.option(
     "--voice-prompt",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Explicit .pt voice prompt file.",
+    help="Explicit VibeVoice .pt voice prompt file.",
 )
 @click.option(
     "--voices-dir",
     default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Directory containing VibeVoice .pt voice prompts.",
+)
+@click.option(
+    "--kokoro-python",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Python 3.11 runtime used to execute the Kokoro helper.",
+)
+@click.option(
+    "--kokoro-lang",
+    default=DEFAULT_KOKORO_LANG,
+    show_default=True,
+    help="Kokoro language code, for example 'a' for US English.",
+)
+@click.option(
+    "--speech-speed",
+    default=DEFAULT_KOKORO_SPEED,
+    show_default=True,
+    type=float,
+    help="Speech rate for Kokoro generation.",
 )
 @click.option(
     "--output-dir", "-o",
@@ -532,52 +912,47 @@ def _write_manifest(output_dir: Path, chunks: list[NarrationChunk]) -> Path:
 @click.option(
     "--list-voices",
     is_flag=True,
-    help="List available voice prompts from --voices-dir and exit.",
+    help="List available voices for the selected backend and exit.",
 )
 def voiceover(
     source: Path,
     project_dir: Optional[Path],
+    source_mode: str,
+    backend: str,
     model_path: str,
     speaker_name: str,
     voice_prompt: Optional[Path],
     voices_dir: Optional[Path],
+    kokoro_python: Optional[Path],
+    kokoro_lang: str,
+    speech_speed: float,
     output_dir: Path,
     device: str,
     cfg_scale: float,
     ddpm_steps: int,
     list_voices: bool,
 ) -> None:
-    """Generate single-speaker narration audio from a plan or project."""
+    """Generate single-speaker narration audio from a plan or project.
+
+    Extracts narration from # NARRATION: comments in scene files (preferred),
+    narration sections in markdown plans, or storyboard concept lines.
+
+    \b
+    Backends:
+      kokoro     Kokoro-82M (fast, 54 voices, voice mixing, recommended)
+      vibevoice  VibeVoice-Realtime-0.5B (expressive, slower)
+
+    \b
+    Examples:
+      3brown1blue voiceover videos/my_project
+      3brown1blue voiceover videos/my_project --backend kokoro --speaker-name af_heart
+      3brown1blue voiceover plan.md --backend vibevoice --speaker-name Carter
+      3brown1blue voiceover videos/my_project --list-voices
+    """
     if project_dir is not None:
         project_dir = _find_project_dir(project_dir)
 
-    resolved_voice_prompt, voice_registry = _resolve_voice_prompt(
-        voice_prompt=voice_prompt,
-        voices_dir=voices_dir,
-        speaker_name=speaker_name,
-    )
-
-    if list_voices:
-        if not voice_registry:
-            click.echo(
-                "No voice registry available. Pass --voices-dir or set "
-                f"{DEFAULT_VOICE_DIR_ENV}."
-            )
-            sys.exit(1)
-        click.echo("\nAvailable VibeVoice prompts:\n")
-        for name in sorted(voice_registry):
-            click.echo(f"  - {name}")
-        return
-
-    if resolved_voice_prompt is None:
-        click.echo(
-            "No voice prompt could be resolved.\n"
-            "Pass --voice-prompt directly, or use --voices-dir / "
-            f"{DEFAULT_VOICE_DIR_ENV} with --speaker-name."
-        )
-        sys.exit(1)
-
-    chunks, project_dir = _load_narration_chunks(source, project_dir)
+    chunks, project_dir = _load_narration_chunks(source, project_dir, source_mode)
     if not chunks:
         click.echo(
             "No narration blocks found.\n"
@@ -592,41 +967,162 @@ def voiceover(
     click.echo(f"\nNarration source: {source}")
     if project_dir is not None:
         click.echo(f"Project dir:      {project_dir}")
+    click.echo(f"Backend:          {backend}")
     click.echo(f"Chunks:           {len(chunks)}")
-    click.echo(f"Voice prompt:     {resolved_voice_prompt}")
+    click.echo(f"Source mode:      {source_mode}")
     click.echo(f"Output dir:       {output_dir}")
 
-    torch_module, processor, model, resolved_device = _load_vibevoice_runtime(
-        model_path=model_path,
-        device=device,
-        ddpm_steps=ddpm_steps,
-    )
-    click.echo(f"Device:           {resolved_device}")
-
     generated: list[NarrationChunk] = []
-    for chunk in chunks:
-        if len(chunk.text.split()) < 4:
-            click.echo(f"Skipping {chunk.slug}: narration too short for stable TTS.")
-            continue
 
-        output_path = output_dir / f"{chunk.slug}.wav"
-        click.echo(
-            f"\nGenerating {output_path.name} "
-            f"from {chunk.source_label} ({len(chunk.text.split())} words)..."
+    if backend == "kokoro":
+        resolved_kokoro_python = _resolve_kokoro_python(kokoro_python)
+        resolved_speaker = (
+            DEFAULT_KOKORO_SPEAKER if speaker_name == DEFAULT_SPEAKER else speaker_name
         )
-        _generate_audio_file(
-            torch_module=torch_module,
-            processor=processor,
-            model=model,
-            device=resolved_device,
-            voice_prompt=resolved_voice_prompt,
-            text=chunk.text,
-            output_path=output_path,
-            cfg_scale=cfg_scale,
-        )
-        generated.append(chunk)
-        click.echo(f"Saved: {output_path}")
 
-    manifest = _write_manifest(output_dir, generated)
-    click.echo(f"\nManifest: {manifest}")
+        if list_voices:
+            voices = _list_kokoro_voices(resolved_kokoro_python)
+            click.echo("\nAvailable Kokoro voices:\n")
+            for name in voices:
+                click.echo(f"  - {name}")
+            return
+
+        click.echo(f"Kokoro runtime:   {resolved_kokoro_python}")
+        click.echo(f"Speaker:          {resolved_speaker}")
+        click.echo(f"Kokoro lang:      {kokoro_lang}")
+        click.echo(f"Speech speed:     {speech_speed:.2f}")
+
+        generated = list(chunks)
+        click.echo("\nGenerating Kokoro narration...")
+        kokoro_summary = _generate_with_kokoro(
+            kokoro_python=resolved_kokoro_python,
+            chunks=generated,
+            output_dir=output_dir,
+            speaker_name=resolved_speaker,
+            lang_code=kokoro_lang,
+            device=device,
+            speech_speed=speech_speed,
+        )
+        if kokoro_summary:
+            click.echo(kokoro_summary)
+        for chunk in generated:
+            click.echo(f"Saved: {output_dir / f'{chunk.slug}.wav'}")
+    else:
+        resolved_voice_prompt, voice_registry = _resolve_voice_prompt(
+            voice_prompt=voice_prompt,
+            voices_dir=voices_dir,
+            speaker_name=speaker_name,
+        )
+
+        if list_voices:
+            if not voice_registry:
+                click.echo(
+                    "No voice registry available. Pass --voices-dir or set "
+                    f"{DEFAULT_VOICE_DIR_ENV}."
+                )
+                sys.exit(1)
+            click.echo("\nAvailable VibeVoice prompts:\n")
+            for name in sorted(voice_registry):
+                click.echo(f"  - {name}")
+            return
+
+        if resolved_voice_prompt is None:
+            click.echo(
+                "No voice prompt could be resolved.\n"
+                "Pass --voice-prompt directly, or use --voices-dir / "
+                f"{DEFAULT_VOICE_DIR_ENV} with --speaker-name."
+            )
+            sys.exit(1)
+
+        click.echo(f"Voice prompt:     {resolved_voice_prompt}")
+        torch_module, processor, model, resolved_device = _load_vibevoice_runtime(
+            model_path=model_path,
+            device=device,
+            ddpm_steps=ddpm_steps,
+        )
+        click.echo(f"Device:           {resolved_device}")
+
+        for chunk in chunks:
+            if len(chunk.text.split()) < 4:
+                click.echo(f"Skipping {chunk.slug}: narration too short for stable TTS.")
+                continue
+
+            output_path = output_dir / f"{chunk.slug}.wav"
+
+            if chunk.beats:
+                beat_dir = output_dir / "_beats" / chunk.slug
+                beat_dir.mkdir(parents=True, exist_ok=True)
+                generated_beats: list[NarrationBeat] = []
+                beat_paths: list[Path] = []
+                target_durations: list[float] = []
+
+                click.echo(
+                    f"\nGenerating {output_path.name} from {chunk.source_label} "
+                    f"using {len(chunk.beats)} timed beat(s)..."
+                )
+                for beat in chunk.beats:
+                    if len(beat.text.split()) < 4:
+                        click.echo(
+                            f"  Skipping beat {beat.beat_index}: narration too short "
+                            "for stable TTS."
+                        )
+                        continue
+
+                    beat_output = beat_dir / f"beat_{beat.beat_index:02d}.wav"
+                    click.echo(
+                        f"  Beat {beat.beat_index}: {len(beat.text.split())} words, "
+                        f"target {beat.target_duration:.2f}s"
+                    )
+                    _generate_audio_file(
+                        torch_module=torch_module,
+                        processor=processor,
+                        model=model,
+                        device=resolved_device,
+                        voice_prompt=resolved_voice_prompt,
+                        text=beat.text,
+                        output_path=beat_output,
+                        cfg_scale=cfg_scale,
+                    )
+                    beat_paths.append(beat_output)
+                    target_durations.append(beat.target_duration)
+                    generated_beats.append(beat)
+
+                if not generated_beats:
+                    click.echo(
+                        f"Skipping {chunk.slug}: no stable narration beats generated."
+                    )
+                    continue
+
+                _concat_wavs(beat_paths, output_path, target_durations)
+                generated.append(
+                    NarrationChunk(
+                        slug=chunk.slug,
+                        text=chunk.text,
+                        source_label=chunk.source_label,
+                        beats=generated_beats,
+                    )
+                )
+                click.echo(f"Saved: {output_path}")
+                continue
+
+            click.echo(
+                f"\nGenerating {output_path.name} "
+                f"from {chunk.source_label} ({len(chunk.text.split())} words)..."
+            )
+            _generate_audio_file(
+                torch_module=torch_module,
+                processor=processor,
+                model=model,
+                device=resolved_device,
+                voice_prompt=resolved_voice_prompt,
+                text=chunk.text,
+                output_path=output_path,
+                cfg_scale=cfg_scale,
+            )
+            generated.append(chunk)
+            click.echo(f"Saved: {output_path}")
+
+    manifest_md, manifest_json = _write_manifests(output_dir, generated)
+    click.echo(f"\nManifest: {manifest_md}")
+    click.echo(f"JSON manifest: {manifest_json}")
     click.echo("Done!")

@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 
 from .audit_video import audit
+from .compose_voiceover import compose_voiceover
 from .edit_scene import edit, list_scenes, preview
 from .from_slides import from_slides
 from .generate import generate
@@ -227,14 +228,43 @@ def _uninstall_copilot() -> None:
 @click.group()
 @click.version_option()
 def main() -> None:
-    """Generate and install Manim animated explainer videos.
+    """3brown1blue: AI-powered Manim explainer videos.
 
-    Generate a scene from a topic using any LLM provider, or install
-    the skill into Claude Code, Cursor, Windsurf, or GitHub Copilot.
+    \b
+    Quick start:
+      3brown1blue generate "Fourier transform" -p claude-code --render
+      3brown1blue generate "dot product" -1 -p claude-code --render
+
+    \b
+    Workflow:
+      generate       Plan + generate scenes from a topic or paper
+      from-slides    Generate from a PowerPoint deck
+      voiceover      Add narration (Kokoro, VibeVoice, Chatterbox)
+      compose-voiceover  Mux audio onto rendered scenes
+
+    \b
+    Scene editing:
+      edit           Edit a scene with natural language
+      list           List scenes in a project
+      preview        Preview a scene in the GUI
+      split          Split monolithic scene.py into files
+      remix          Re-target to a different audience
+      audit          Visual quality audit (frame extraction)
+
+    \b
+    Skill install:
+      install        Install into Claude Code / Cursor / Windsurf / Copilot
+      update         Update existing installation
+      uninstall      Remove the skill
+      status         Show what is installed
+
+    \b
+    Docs: https://github.com/AmitSubhash/3brown1blue
     """
 
 
 main.add_command(audit)
+main.add_command(compose_voiceover)
 main.add_command(generate)
 main.add_command(from_slides)
 main.add_command(edit)
@@ -255,7 +285,25 @@ main.add_command(voiceover)
               help="Global or project install (Cursor only).")
 @click.option("--force", is_flag=True, help="Overwrite existing installation.")
 def install(platform: str | None, scope: str | None, force: bool) -> None:
-    """Install the Manim explainer skill."""
+    """Install the Manim skill into your AI coding tool.
+
+    Copies 24 rule files, 3 templates, and safe wrappers so your AI
+    generates production-quality Manim animations out of the box.
+
+    \b
+    Supported platforms:
+      claude-code  ~/.claude/skills/manim/
+      cursor       .cursor/rules/manim-*.mdc (global or project)
+      windsurf     .windsurfrules (project)
+      copilot      .github/copilot-instructions.md (project)
+
+    \b
+    Examples:
+      3brown1blue install                          # interactive
+      3brown1blue install -p claude-code           # direct
+      3brown1blue install -p cursor -s global      # Cursor global
+      3brown1blue install -p cursor --force        # overwrite
+    """
     if platform is None:
         platform = _prompt_platform()
 
