@@ -271,6 +271,10 @@ def _render_scene(scene_file: Path, quality: str) -> None:
                                  "CHART_FOCUS", "GRID_CARDS"]),
               default="FULL_CENTER", show_default=True,
               help="Layout template (single-scene mode).")
+@click.option("--mathcode", "mathcode_path", type=click.Path(exists=True), default=None,
+              help="Lean file or mathcode output dir for formal math context.")
+@click.option("--mathcode-problem", type=click.Path(exists=True), default=None,
+              help="Original problem JSON (for natural language extraction).")
 def generate(
     topic: str,
     provider: Optional[str],
@@ -286,6 +290,8 @@ def generate(
     single_scene: bool,
     duration: int,
     template: str,
+    mathcode_path: Optional[str],
+    mathcode_problem: Optional[str],
 ) -> None:
     """Generate a Manim explainer video from TOPIC.
 
@@ -294,6 +300,7 @@ def generate(
     complete Manim code following the skill's layout templates and rules.
 
     Use --single-scene / -1 to skip planning and generate one scene directly.
+    Use --mathcode to feed a Lean formalization for rigorous math explanations.
 
     \b
     Examples:
@@ -303,8 +310,25 @@ def generate(
       3brown1blue generate "neural ODEs" -a graduate -d machine-learning
       3brown1blue generate "dot product" -1 -p claude-code --render
       3brown1blue generate "softmax" -1 --duration 20 --template BUILD_UP
+      3brown1blue generate "set union" --mathcode proof.lean -p claude-code
     """
     from ._shared import prompt_provider
+
+    # Load mathcode context if provided
+    mathcode_context = ""
+    if mathcode_path:
+        from .mathcode_bridge import load_mathcode_output, breakdown_to_prompt_context
+
+        mc_source = Path(mathcode_path)
+        mc_problem = Path(mathcode_problem) if mathcode_problem else None
+        click.echo(f"Loading mathcode output from {mc_source}...")
+        breakdown = load_mathcode_output(mc_source, mc_problem)
+        mathcode_context = breakdown_to_prompt_context(breakdown)
+        click.echo(f"  Theorem: {breakdown.theorem_name}")
+        click.echo(f"  Steps: {len(breakdown.steps)}")
+        click.echo(f"  Lemmas: {len(breakdown.lemmas)}")
+        if breakdown.eval_grade:
+            click.echo(f"  Grade: {breakdown.eval_grade}")
 
     if provider is None:
         provider = prompt_provider()
@@ -322,12 +346,14 @@ def generate(
         click.echo(f"Template: {template}  Duration: ~{duration}s")
         click.echo(f"Audience: {audience}  Domain: {domain}")
 
+        user_msg = SINGLE_SCENE.format(
+            topic=topic, audience=audience, domain=domain,
+            duration=duration, template=template,
+        )
+        if mathcode_context:
+            user_msg = mathcode_context + "\n\n" + user_msg
         raw = call_llm(
-            provider, model, api_key,
-            SINGLE_SCENE.format(
-                topic=topic, audience=audience, domain=domain,
-                duration=duration, template=template,
-            ),
+            provider, model, api_key, user_msg,
             audience=audience, domain=domain,
         )
         code = _extract_code(raw)
@@ -346,8 +372,10 @@ def generate(
     click.echo(f"\nPlanning: \"{topic}\"")
     click.echo(f"Provider: {cfg['label']}  ({plan_model})")
     click.echo(f"Audience: {audience}  Domain: {domain}")
-    plan = call_llm(provider, plan_model, api_key,
-                    RESEARCH_AND_PLAN.format(topic=topic, audience=audience, domain=domain),
+    plan_msg = RESEARCH_AND_PLAN.format(topic=topic, audience=audience, domain=domain)
+    if mathcode_context:
+        plan_msg = mathcode_context + "\n\n" + plan_msg
+    plan = call_llm(provider, plan_model, api_key, plan_msg,
                     audience=audience, domain=domain)
 
     # Step 2: Review
