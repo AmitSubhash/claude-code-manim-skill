@@ -47,5 +47,20 @@ all       = ["anthropic>=0.40", "openai>=1.0", "python-pptx>=0.6"]
 [project.scripts]
 3brown1blue = "three_b1b.cli:main"
 
+[tool.hatch.build]
+exclude = [
+    ".tts311/",
+    ".venv/",
+    "videos/",
+    "media/",
+    "dist/",
+    "voiceover_audio/",
+    "assets/",
+    "*.mp4",
+    "*.wav",
+    ".ruff_cache/",
+    "__pycache__/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/three_b1b"]
